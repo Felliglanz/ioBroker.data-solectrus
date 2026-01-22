@@ -9,8 +9,7 @@
         "items": {
           "type": "custom",
           "url": "custom/customComponents.js",
-          "component": "DataSolectrusItemsEditor",
-          "attr": "items",
+          "name": "DataSolectrusItemsEditor",
           "label": "Configured values",
           "sm": 12
         }
