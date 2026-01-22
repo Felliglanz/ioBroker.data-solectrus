@@ -194,6 +194,42 @@ class DataSolectrus extends utils.Adapter {
 	}
 
 	async createInfoStates() {
+		await this.setObjectNotExistsAsync('info.status', {
+			type: 'state',
+			common: {
+				name: 'Status',
+				type: 'string',
+				role: 'text',
+				read: true,
+				write: false,
+			},
+			native: {},
+		});
+
+		await this.setObjectNotExistsAsync('info.itemsConfigured', {
+			type: 'state',
+			common: {
+				name: 'Configured items',
+				type: 'number',
+				role: 'value',
+				read: true,
+				write: false,
+			},
+			native: {},
+		});
+
+		await this.setObjectNotExistsAsync('info.itemsEnabled', {
+			type: 'state',
+			common: {
+				name: 'Enabled items',
+				type: 'number',
+				role: 'value',
+				read: true,
+				write: false,
+			},
+			native: {},
+		});
+
 		await this.setObjectNotExistsAsync('info.lastError', {
 			type: 'state',
 			common: {
@@ -230,6 +266,9 @@ class DataSolectrus extends utils.Adapter {
 			native: {},
 		});
 
+		await this.setStateAsync('info.status', 'starting', true);
+		await this.setStateAsync('info.itemsConfigured', 0, true);
+		await this.setStateAsync('info.itemsEnabled', 0, true);
 		await this.setStateAsync('info.lastError', '', true);
 		await this.setStateAsync('info.lastRun', '', true);
 		await this.setStateAsync('info.evalTimeMs', 0, true);
@@ -321,14 +360,18 @@ class DataSolectrus extends utils.Adapter {
 
 	async prepareItems() {
 		const items = Array.isArray(this.config.items) ? this.config.items : [];
-		const enabledItems = items.filter(it => it && typeof it === 'object');
+		const validItems = items.filter(it => it && typeof it === 'object');
+		const enabledItems = validItems.filter(it => !!it.enabled);
 
-		for (const item of enabledItems) {
+		await this.setStateAsync('info.itemsConfigured', validItems.length, true);
+		await this.setStateAsync('info.itemsEnabled', enabledItems.length, true);
+
+		for (const item of validItems) {
 			await this.ensureOutputState(item);
 		}
 
 		const sourceIds = new Set();
-		for (const item of enabledItems) {
+		for (const item of validItems) {
 			for (const id of this.collectSourceStatesFromItem(item)) {
 				sourceIds.add(id);
 			}
@@ -353,10 +396,12 @@ class DataSolectrus extends utils.Adapter {
 			}
 		}
 
-		if (!enabledItems.some(it => !!it.enabled)) {
+		if (enabledItems.length === 0) {
 			const msg = 'No item is enabled. Please enable at least one item in the adapter configuration.';
 			this.log.warn(msg);
-			await this.setStateAsync('info.lastError', msg, true);
+			await this.setStateAsync('info.status', 'no_items_enabled', true);
+		} else {
+			await this.setStateAsync('info.status', 'ok', true);
 		}
 	}
 
@@ -428,6 +473,11 @@ class DataSolectrus extends utils.Adapter {
 		const start = Date.now();
 		const items = Array.isArray(this.config.items) ? this.config.items : [];
 		const enabledItems = items.filter(it => it && typeof it === 'object' && it.enabled);
+
+		// Keep status in sync even if config changes without a restart
+		await this.setStateAsync('info.itemsConfigured', items.filter(it => it && typeof it === 'object').length, true);
+		await this.setStateAsync('info.itemsEnabled', enabledItems.length, true);
+		await this.setStateAsync('info.status', enabledItems.length ? 'ok' : 'no_items_enabled', true);
 
 		for (const item of enabledItems) {
 			const targetId = this.getItemTargetId(item);
