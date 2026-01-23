@@ -463,8 +463,10 @@
             // Chrome/OS dropdowns may render <option> on a light surface even in dark mode,
             // but inherit the white text color -> white on white. Force readable option styling.
             const selectStyle = Object.assign({}, inputStyle, {
-                background: isDark ? '#1f1f1f' : '#ffffff',
+                backgroundColor: isDark ? '#1f1f1f' : '#ffffff',
                 color: isDark ? '#ffffff' : '#111111',
+                colorScheme: isDark ? 'dark' : 'light',
+                WebkitTextFillColor: isDark ? '#ffffff' : '#111111',
             });
 
             const optionStyle = {
