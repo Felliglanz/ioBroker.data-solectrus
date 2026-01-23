@@ -52,9 +52,11 @@ Felder:
 - **Datatype**: optional (Standard: number).
 - **Role**, **Unit**: optional (für Metadaten).
 
-Nachbearbeitung (immer auf das Ergebnis angewendet, egal ob `source` oder `formula`):
+Nachbearbeitung:
 
 - **Clamp negative to 0**: negative Werte werden auf `0` gesetzt.
+	- bei `mode=formula`: bereits auf **Inputs vor der Rechnung** (damit negative Messartefakte nicht in die Summe eingehen).
+	- zusätzlich immer auf das **Ergebnis** (zur Sicherheit; ändert nichts, wenn Inputs schon bereinigt sind).
 - **Clamp result**: Ergebnis begrenzen (Min/Max). Leere Felder bedeuten „nicht begrenzen“.
 
 ## Formeln

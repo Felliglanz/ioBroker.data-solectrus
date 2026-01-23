@@ -30,13 +30,6 @@ class DataSolectrus extends utils.Adapter {
 			round: Math.round,
 			floor: Math.floor,
 			ceil: Math.ceil,
-			deadband: (value, threshold) => {
-				const v = Number(value);
-				const t = Number(threshold);
-				if (!Number.isFinite(v)) return 0;
-				if (!Number.isFinite(t) || t <= 0) return v;
-				return Math.abs(v) < t ? 0 : v;
-			},
 			clamp: (value, min, max) => {
 				const v = Number(value);
 				const lo = Number(min);
@@ -557,7 +550,12 @@ class DataSolectrus extends utils.Adapter {
 		const mode = item.mode || 'formula';
 		if (mode === 'source') {
 			const id = item.sourceState ? String(item.sourceState) : '';
-			return this.safeNum(snapshot ? snapshot.get(id) : this.cache.get(id));
+			let v = this.safeNum(snapshot ? snapshot.get(id) : this.cache.get(id));
+			// Apply noNegative already at input/source time as well
+			if (item && item.noNegative && v < 0) {
+				v = 0;
+			}
+			return v;
 		}
 
 		const inputs = Array.isArray(item.inputs) ? item.inputs : [];
@@ -570,7 +568,12 @@ class DataSolectrus extends utils.Adapter {
 			const key = keyRaw.replace(/[^a-zA-Z0-9_]/g, '_');
 			if (!key) continue;
 			const id = inp.sourceState ? String(inp.sourceState) : '';
-			vars[key] = this.safeNum(snapshot ? snapshot.get(id) : this.cache.get(id));
+			let v = this.safeNum(snapshot ? snapshot.get(id) : this.cache.get(id));
+			// If enabled, clamp negative inputs BEFORE formula evaluation.
+			if (item && item.noNegative && v < 0) {
+				v = 0;
+			}
+			vars[key] = v;
 		}
 
 		const expr = item.formula ? String(item.formula).trim() : '';
