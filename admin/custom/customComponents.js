@@ -460,6 +460,18 @@
                 background: isDark ? 'rgba(255,255,255,0.06)' : '#ffffff',
             };
 
+            // Chrome/OS dropdowns may render <option> on a light surface even in dark mode,
+            // but inherit the white text color -> white on white. Force readable option styling.
+            const selectStyle = Object.assign({}, inputStyle, {
+                background: isDark ? '#1f1f1f' : '#ffffff',
+                color: isDark ? '#ffffff' : '#111111',
+            });
+
+            const optionStyle = {
+                background: isDark ? '#1f1f1f' : '#ffffff',
+                color: isDark ? '#ffffff' : '#111111',
+            };
+
             const rowStyle2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 };
 
             const headerBarStyle = {
@@ -709,12 +721,12 @@
                               React.createElement(
                                   'select',
                                   {
-                                      style: inputStyle,
+                                      style: selectStyle,
                                       value: selectedItem.mode || 'formula',
                                       onChange: e => updateSelected('mode', e.target.value),
                                   },
-                                  React.createElement('option', { value: 'formula' }, t('Formula')),
-                                  React.createElement('option', { value: 'source' }, t('Source'))
+                                  React.createElement('option', { value: 'formula', style: optionStyle }, t('Formula')),
+                                  React.createElement('option', { value: 'source', style: optionStyle }, t('Source'))
                               ),
                               (selectedItem.mode || 'formula') === 'source'
                                   ? React.createElement(
@@ -800,15 +812,15 @@
                                       React.createElement(
                                           'select',
                                           {
-                                              style: inputStyle,
+                                              style: selectStyle,
                                               value: selectedItem.type || '',
                                               onChange: e => updateSelected('type', e.target.value),
                                           },
-                                          React.createElement('option', { value: '' }, t('Standard')),
-                                          React.createElement('option', { value: 'number' }, t('Number')),
-                                          React.createElement('option', { value: 'boolean' }, t('Boolean')),
-                                          React.createElement('option', { value: 'string' }, t('String')),
-                                          React.createElement('option', { value: 'mixed' }, t('Mixed'))
+                                          React.createElement('option', { value: '', style: optionStyle }, t('Standard')),
+                                          React.createElement('option', { value: 'number', style: optionStyle }, t('Number')),
+                                          React.createElement('option', { value: 'boolean', style: optionStyle }, t('Boolean')),
+                                          React.createElement('option', { value: 'string', style: optionStyle }, t('String')),
+                                          React.createElement('option', { value: 'mixed', style: optionStyle }, t('Mixed'))
                                       )
                                   ),
                                   React.createElement(
