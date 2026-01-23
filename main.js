@@ -18,6 +18,8 @@ class DataSolectrus extends utils.Adapter {
 		});
 
 		this.cache = new Map();
+		this.cacheTs = new Map();
+		this.currentSnapshot = null;
 		this.tickTimer = null;
 		this.isUnloading = false;
 
@@ -40,6 +42,9 @@ class DataSolectrus extends utils.Adapter {
 			// Read a foreign state value by id from cache (sync, safe).
 			s: id => {
 				const key = String(id);
+				if (this.currentSnapshot && typeof this.currentSnapshot.get === 'function') {
+					return this.safeNum(this.currentSnapshot.get(key));
+				}
 				return this.safeNum(this.cache.get(key));
 			},
 		};
@@ -319,6 +324,54 @@ class DataSolectrus extends utils.Adapter {
 			return;
 		}
 		this.cache.set(id, state.val);
+		this.cacheTs.set(id, typeof state.ts === 'number' ? state.ts : Date.now());
+	}
+
+	getUseSnapshotReads() {
+		return !!(this.config && this.config.snapshotInputs);
+	}
+
+	getSnapshotDelayMs() {
+		const raw = this.config && this.config.snapshotDelayMs !== undefined ? this.config.snapshotDelayMs : 0;
+		const ms = Number(raw);
+		return Number.isFinite(ms) && ms >= 0 && ms <= 5000 ? Math.round(ms) : 0;
+	}
+
+	async buildSnapshotForTick(items) {
+		const validItems = Array.isArray(items) ? items.filter(it => it && typeof it === 'object') : [];
+		const sourceIds = new Set();
+		for (const item of validItems) {
+			for (const id of this.collectSourceStatesFromItem(item)) {
+				sourceIds.add(id);
+			}
+		}
+
+		if (this.getUseSnapshotReads()) {
+			const delay = this.getSnapshotDelayMs();
+			if (delay) {
+				await new Promise(resolve => setTimeout(resolve, delay));
+			}
+			await Promise.all(
+				Array.from(sourceIds).map(async id => {
+					try {
+						const st = await this.getForeignStateAsync(id);
+						if (st) {
+							this.cache.set(id, st.val);
+							this.cacheTs.set(id, typeof st.ts === 'number' ? st.ts : Date.now());
+						}
+					} catch {
+						// ignore per-id read errors
+					}
+				})
+			);
+		}
+
+		/** @type {Map<string, any>} */
+		const snapshot = new Map();
+		for (const id of sourceIds) {
+			snapshot.set(id, this.cache.get(id));
+		}
+		return snapshot;
 	}
 
 	collectSourceStatesFromItem(item) {
@@ -493,11 +546,11 @@ class DataSolectrus extends utils.Adapter {
 		}, delay);
 	}
 
-	async computeItemValue(item) {
+	async computeItemValue(item, snapshot) {
 		const mode = item.mode || 'formula';
 		if (mode === 'source') {
 			const id = item.sourceState ? String(item.sourceState) : '';
-			return this.safeNum(this.cache.get(id));
+			return this.safeNum(snapshot ? snapshot.get(id) : this.cache.get(id));
 		}
 
 		const inputs = Array.isArray(item.inputs) ? item.inputs : [];
@@ -510,7 +563,7 @@ class DataSolectrus extends utils.Adapter {
 			const key = keyRaw.replace(/[^a-zA-Z0-9_]/g, '_');
 			if (!key) continue;
 			const id = inp.sourceState ? String(inp.sourceState) : '';
-			vars[key] = this.safeNum(this.cache.get(id));
+			vars[key] = this.safeNum(snapshot ? snapshot.get(id) : this.cache.get(id));
 		}
 
 		const expr = item.formula ? String(item.formula).trim() : '';
@@ -556,6 +609,9 @@ class DataSolectrus extends utils.Adapter {
 		await this.setStateAsync('info.itemsEnabled', enabledItems.length, true);
 		await this.setStateAsync('info.status', enabledItems.length ? 'ok' : 'no_items_enabled', true);
 
+		const snapshot = await this.buildSnapshotForTick(items);
+		this.currentSnapshot = snapshot;
+
 		for (const item of enabledItems) {
 			const targetId = this.getItemOutputId(item);
 			if (!targetId) {
@@ -563,7 +619,7 @@ class DataSolectrus extends utils.Adapter {
 			}
 
 			try {
-				const raw = await this.computeItemValue(item);
+				const raw = await this.computeItemValue(item, snapshot);
 				const value = this.applyResultRules(item, raw);
 				await this.setStateAsync(targetId, value, true);
 			} catch (e) {
@@ -573,6 +629,8 @@ class DataSolectrus extends utils.Adapter {
 				await this.setStateAsync('info.lastError', msg, true);
 			}
 		}
+
+		this.currentSnapshot = null;
 
 		await this.setStateAsync('info.lastRun', new Date().toISOString(), true);
 		await this.setStateAsync('info.evalTimeMs', Date.now() - start, true);

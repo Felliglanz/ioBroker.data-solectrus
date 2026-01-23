@@ -21,6 +21,11 @@ Die Konfiguration ist absichtlich **leer** – du fügst nur die Werte hinzu, di
 
 - **Poll interval (seconds)**: Intervall in Sekunden (min 1). Der Tick läuft synchron zur Uhr, d.h. bei 5s z.B. auf `...:00, ...:05, ...:10, ...`.
 
+Optional (gegen Timing-/Cache-Effekte bei vielen Quellen):
+
+- **Read inputs on tick (snapshot)**: Wenn aktiv, liest der Adapter zu jedem Tick alle benötigten Input-States einmal aktiv via ioBroker und rechnet dann mit diesem „Snapshot“. Das kann kleine Abweichungen reduzieren, wenn mehrere Quellen minimal versetzt updaten.
+- **Snapshot delay (ms)**: Optionaler Delay vor dem Snapshot (z.B. 100–300ms), falls deine Sensoren typischerweise kurz nach dem Tick-Rand updaten.
+
 ### Werte (Items)
 
 Jeder Eintrag erzeugt genau **einen Output-State**.

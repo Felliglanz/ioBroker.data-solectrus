@@ -2,6 +2,8 @@
   "Values": "Values",
   "Runtime": "Global settings",
   "Poll interval (seconds)": "Poll interval (seconds)",
+  "Read inputs on tick (snapshot)": "Read inputs on tick (snapshot)",
+  "Snapshot delay (ms)": "Snapshot delay (ms)",
   "Configured values": "Configured values",
   "Add": "Add",
   "Duplicate": "Duplicate",

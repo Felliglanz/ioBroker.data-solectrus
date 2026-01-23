@@ -2,6 +2,8 @@
   "Values": "Werte",
   "Runtime": "Einstellungen",
   "Poll interval (seconds)": "Intervall (Sekunden)",
+  "Read inputs on tick (snapshot)": "Inputs pro Tick aktiv lesen (Snapshot)",
+  "Snapshot delay (ms)": "Snapshot-Verzögerung (ms)",
   "Configured values": "Konfigurierte Werte",
   "Add": "Hinzufügen",
   "Duplicate": "Duplizieren",
