@@ -9,7 +9,7 @@
     'use strict';
 
     const REMOTE_NAME = 'DataSolectrusItems';
-    const UI_VERSION = '2026-01-23 20260123-4';
+    const UI_VERSION = '2026-01-23 20260123-5';
     const DEBUG = false;
     let shareScope;
 
@@ -506,8 +506,12 @@
 
             // Native <select>/<option> popups can ignore styles in Chrome dark mode (OS-rendered).
             // Use a custom dropdown to ensure readable options.
-            // Match the visual style of normal inputs in this editor
-            const dropdownBg = inputStyle.background;
+            // Match the visual style of normal inputs in this editor.
+            // In dark mode, inputStyle.background is slightly transparent (rgba). For dropdown menus
+            // that looks wrong because the page background shines through. Use an opaque panel color.
+            const bgStr = String(inputStyle.background || '');
+            const isTranslucent = isDark && bgStr.startsWith('rgba(');
+            const dropdownBg = isTranslucent ? colors.panelBg : inputStyle.background;
             const dropdownText = colors.text;
 
             const dropdownButtonStyle = Object.assign({}, inputStyle, {
