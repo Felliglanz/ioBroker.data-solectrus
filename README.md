@@ -45,6 +45,7 @@ Felder:
 	- bei `mode=source`: der Quell-State (vollqualifiziert, z.B. `some.adapter.0.channel.state`).
 	- bei `mode=formula`: pro Input ein Source-State.
 - **Inputs** (nur `mode=formula`): Liste aus (Key, Source State).
+	- Optional pro Input: **Input negativ auf 0** (klemmt nur diesen Input vor der Rechnung).
 	- **Wichtig zu Keys**: In Formeln sind `-` und Leerzeichen Operatoren/Trenner.
 		- Verwende daher am besten nur `a-z`, `0-9`, `_` (z.B. `bkw_garage`, `enpal`, `zendure`).
 		- Intern werden ungültige Zeichen im Key zu `_` umgewandelt.

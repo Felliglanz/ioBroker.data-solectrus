@@ -569,8 +569,10 @@ class DataSolectrus extends utils.Adapter {
 			if (!key) continue;
 			const id = inp.sourceState ? String(inp.sourceState) : '';
 			let v = this.safeNum(snapshot ? snapshot.get(id) : this.cache.get(id));
-			// If enabled, clamp negative inputs BEFORE formula evaluation.
-			if (item && item.noNegative && v < 0) {
+			// Clamp negative inputs BEFORE formula evaluation.
+			// - item.noNegative: global for this item
+			// - inp.noNegative: only this input
+			if (((item && item.noNegative) || (inp && inp.noNegative)) && v < 0) {
 				v = 0;
 			}
 			vars[key] = v;

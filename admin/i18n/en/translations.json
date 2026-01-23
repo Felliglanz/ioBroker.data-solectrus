@@ -34,6 +34,7 @@
   "Clamp negative to 0": "Clamp negative to 0",
   "Min": "Min",
   "Max": "Max",
+  "Clamp input negative to 0": "Clamp input negative to 0",
   "Formula expression": "Formula expression",
   "e.g. pv1 + pv2 + pv3": "e.g. pv1 + pv2 + pv3",
   "e.g. some.adapter.0.channel.state": "e.g. some.adapter.0.channel.state",

@@ -32,6 +32,7 @@
   "Folder/Group": "Ordner/Gruppe",
   "Clamp result": "Ergebnis begrenzen",
   "Clamp negative to 0": "Negative Werte auf 0 begrenzen",
+  "Clamp input negative to 0": "Input negativ auf 0",
   "Min": "Min",
   "Max": "Max",
   "Formula expression": "Formel-Ausdruck",
