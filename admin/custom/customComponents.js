@@ -9,7 +9,7 @@
     'use strict';
 
     const REMOTE_NAME = 'DataSolectrusItems';
-    const UI_VERSION = '2026-01-25 20260125-1';
+    const UI_VERSION = '2026-01-25 20260125-2';
     const DEBUG = false;
     let shareScope;
 
@@ -116,14 +116,7 @@
             const dataIsArray = Array.isArray(props && props.data);
             const dataIsObject = !!(props && props.data && typeof props.data === 'object' && !dataIsArray);
 
-            const getThemeType = () => {
-                if (props && typeof props.themeType === 'string' && props.themeType) {
-                    return props.themeType;
-                }
-                const mode = props && props.theme && props.theme.palette && props.theme.palette.mode;
-                if (mode === 'dark' || mode === 'light') {
-                    return mode;
-                }
+            const getDomThemeType = () => {
                 try {
                     const doc = globalThis.document;
                     const htmlTheme = doc && doc.documentElement ? doc.documentElement.getAttribute('data-theme') : '';
@@ -145,10 +138,73 @@
                 return '';
             };
 
-            const themeType = getThemeType();
+            const getThemeType = () => {
+                // DOM is the source of truth for the currently active Admin theme.
+                // Some Admin theme switches do not trigger a re-render of custom components.
+                const domTheme = getDomThemeType();
+                if (domTheme === 'dark' || domTheme === 'light') {
+                    return domTheme;
+                }
+
+                if (props && typeof props.themeType === 'string' && (props.themeType === 'dark' || props.themeType === 'light')) {
+                    return props.themeType;
+                }
+
+                const mode = props && props.theme && props.theme.palette && props.theme.palette.mode;
+                if (mode === 'dark' || mode === 'light') {
+                    return mode;
+                }
+
+                return '';
+            };
+
+            const [themeType, setThemeType] = React.useState(() => getThemeType());
+
+            React.useEffect(() => {
+                let observer;
+
+                const update = () => {
+                    const next = getThemeType();
+                    if ((next === 'dark' || next === 'light') && next !== themeType) {
+                        setThemeType(next);
+                    }
+                };
+
+                // Sync once on mount.
+                update();
+
+                try {
+                    const doc = globalThis.document;
+                    if (!doc || typeof globalThis.MutationObserver !== 'function') {
+                        return undefined;
+                    }
+
+                    observer = new globalThis.MutationObserver(update);
+
+                    if (doc.documentElement) {
+                        observer.observe(doc.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
+                    }
+                    if (doc.body) {
+                        observer.observe(doc.body, { attributes: true, attributeFilter: ['class'] });
+                    }
+                } catch {
+                    // ignore
+                }
+
+                return () => {
+                    try {
+                        observer && observer.disconnect();
+                    } catch {
+                        // ignore
+                    }
+                };
+            }, [themeType]);
+
             const isDark = themeType === 'dark';
             const theme = (props && props.theme) || null;
             const themePalette = theme && theme.palette ? theme.palette : null;
+            const paletteMatches = !!(themePalette && (themePalette.mode === 'dark' || themePalette.mode === 'light') && themePalette.mode === themeType);
+            const effectivePalette = paletteMatches ? themePalette : null;
 
             const fallbackColors = isDark
                 ? {
@@ -175,18 +231,18 @@
             // Prefer the surrounding Admin theme to keep this editor visually consistent.
             // Fallback to the self-defined palette if theme is unavailable.
             const colors = Object.assign({}, fallbackColors, {
-                panelBg: (themePalette && themePalette.background && themePalette.background.paper) || fallbackColors.panelBg,
+                panelBg: (effectivePalette && effectivePalette.background && effectivePalette.background.paper) || fallbackColors.panelBg,
                 panelBg2:
-                    (themePalette && themePalette.background && (themePalette.background.paper || themePalette.background.default)) ||
+                    (effectivePalette && effectivePalette.background && (effectivePalette.background.paper || effectivePalette.background.default)) ||
                     fallbackColors.panelBg2,
-                text: (themePalette && themePalette.text && themePalette.text.primary) || fallbackColors.text,
-                textMuted: (themePalette && themePalette.text && themePalette.text.secondary) || fallbackColors.textMuted,
-                border: (themePalette && themePalette.divider) || fallbackColors.border,
-                rowBorder: (themePalette && themePalette.divider) || fallbackColors.rowBorder,
-                hover: (themePalette && themePalette.action && themePalette.action.hover) || fallbackColors.hover,
-                active: (themePalette && themePalette.action && themePalette.action.selected) || fallbackColors.active,
+                text: (effectivePalette && effectivePalette.text && effectivePalette.text.primary) || fallbackColors.text,
+                textMuted: (effectivePalette && effectivePalette.text && effectivePalette.text.secondary) || fallbackColors.textMuted,
+                border: (effectivePalette && effectivePalette.divider) || fallbackColors.border,
+                rowBorder: (effectivePalette && effectivePalette.divider) || fallbackColors.rowBorder,
+                hover: (effectivePalette && effectivePalette.action && effectivePalette.action.hover) || fallbackColors.hover,
+                active: (effectivePalette && effectivePalette.action && effectivePalette.action.selected) || fallbackColors.active,
                 inputBg:
-                    (themePalette && themePalette.background && themePalette.background.paper) ||
+                    (effectivePalette && effectivePalette.background && effectivePalette.background.paper) ||
                     (isDark ? 'rgba(255,255,255,0.06)' : '#ffffff'),
             });
 
@@ -617,7 +673,7 @@
                     key: 'selectStateId',
                     imagePrefix: '../..',
                     dialogName: (props && (props.adapterName || props.adapter)) || 'data-solectrus',
-                    themeType: themeType || (props && props.themeType),
+                    themeType: themeType,
                     theme: theme,
                     socket: socket,
                     types: 'state',
