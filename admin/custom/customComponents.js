@@ -9,7 +9,7 @@
     'use strict';
 
     const REMOTE_NAME = 'DataSolectrusItems';
-    const UI_VERSION = '2026-01-25 20260125-3';
+    const UI_VERSION = '2026-01-25 20260125-4';
     const DEBUG = false;
     let shareScope;
 
@@ -157,6 +157,69 @@
                 const domTheme = getDomThemeType();
                 if (domTheme === 'dark' || domTheme === 'light') {
                     return domTheme;
+                }
+
+                // Some Admin versions switch theme by swapping CSS variables / styles only,
+                // without changing attributes/classes we can observe. Infer mode from computed colors.
+                const getComputedThemeType = () => {
+                    try {
+                        const doc = globalThis.document;
+                        if (!doc || !globalThis.getComputedStyle) return '';
+
+                        const parseRgb = value => {
+                            const s = String(value || '').trim();
+                            const m = s.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/i);
+                            if (!m) return null;
+                            const r = Number(m[1]);
+                            const g = Number(m[2]);
+                            const b = Number(m[3]);
+                            const a = m[4] === undefined ? 1 : Number(m[4]);
+                            if (![r, g, b, a].every(n => Number.isFinite(n))) return null;
+                            return { r, g, b, a };
+                        };
+
+                        const luminance = rgb => {
+                            // Simple perceived luminance (0..255)
+                            return 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+                        };
+
+                        const candidates = [];
+                        if (doc.body) candidates.push(doc.body);
+                        if (doc.documentElement) candidates.push(doc.documentElement);
+                        try {
+                            const q = sel => doc.querySelector(sel);
+                            candidates.push(
+                                q('.MuiPaper-root'),
+                                q('.MuiDrawer-paper'),
+                                q('.MuiDialog-paper'),
+                                q('#root'),
+                                q('.root')
+                            );
+                        } catch {
+                            // ignore
+                        }
+
+                        for (let i = 0; i < candidates.length; i++) {
+                            const el = candidates[i];
+                            if (!el) continue;
+                            const cs = globalThis.getComputedStyle(el);
+                            if (!cs) continue;
+                            const bg = parseRgb(cs.backgroundColor);
+                            if (!bg) continue;
+                            if (bg.a === 0) continue; // transparent
+                            const l = luminance(bg);
+                            // Threshold chosen to be robust; typical dark backgrounds are well below this.
+                            return l < 140 ? 'dark' : 'light';
+                        }
+                    } catch {
+                        // ignore
+                    }
+                    return '';
+                };
+
+                const computedTheme = getComputedThemeType();
+                if (computedTheme === 'dark' || computedTheme === 'light') {
+                    return computedTheme;
                 }
 
                 if (props && typeof props.themeType === 'string' && (props.themeType === 'dark' || props.themeType === 'light')) {
