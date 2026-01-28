@@ -27,6 +27,6 @@ Der Adapter ist ein „Daten-Preprozessor“: Er liest vorhandene ioBroker-State
 
 Weiter geht’s hier:
 
-- [Use-Cases](Use-Cases.md)
+- [[Use-Cases]]
 
-Tipp: Wenn du einen eigenen Anwendungsfall dokumentierst, hänge ihn in [Use-Cases](Use-Cases.md) an – so bleibt das Wiki für Einsteiger schnell durchsuchbar.
+Tipp: Wenn du einen eigenen Anwendungsfall dokumentierst, hänge ihn in [[Use-Cases]] an – so bleibt das Wiki für Einsteiger schnell durchsuchbar.
