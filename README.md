@@ -100,35 +100,20 @@ Beispiel:
 
 Hinweis: Diese States werden nicht automatisch „entdeckt“; verwende dafür idealerweise Inputs oder achte darauf, dass der State existiert und der Adapter ihn lesen kann.
 
-## Beispiele
+## Use-Cases / Beispiele
 
-### PV-Leistung zusammenfassen
+Die vollständigen, ausführlichen Use-Cases (mit Schritt-für-Schritt-Konfiguration und Formeln) sind ins Wiki ausgelagert, damit sie leichter erweitert werden können.
 
-- Group: `pv`
-- Target ID: `leistung`
-- Mode: `formula`
-- Inputs:
-	- `enpal` → `<...>`
-	- `zendure` → `<...>`
-	- `bkw` → `<...>`
-- Formel: `enpal + zendure + bkw`
+- Wiki: https://github.com/Felliglanz/data-solectrus/wiki
 
-### Batterie „Leistung“ aus zwei States
+Typische Anwendungsfälle:
 
-Wenn du `outputPackPower` und `packInputPower` hast:
-
-- Inputs: `out`, `in`
-- Formel (signiert): `out - in`
-
-Oder getrennt:
-
-- Entladen: `max(0, out - in)`
-- Laden: `max(0, in - out)`
-
-### Werte begrenzen
-
-- Maximal 20000W: Clamp result aktivieren, **Max = 20000**, Min leer.
-- Keine negativen Werte: Clamp negative to 0 aktivieren (oder Clamp result mit Min=0).
+- PV-Leistung aus mehreren Quellen summieren (z.B. Enpal + Zendure + BKW)
+- Verbraucher/Verbrauchergruppen zusammenfassen
+- Hausverbrauch aus PV/Netz/Batterie herleiten
+- Batterie-Leistung (Laden/Entladen) aus zwei Messwerten berechnen
+- SoC aus mehreren Speichern (gewichtet nach Kapazität) zusammenführen
+- Werte klemmen/begrenzen (negativ → 0, Min/Max)
 
 ## Diagnose-States
 
