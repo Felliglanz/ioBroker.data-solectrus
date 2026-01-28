@@ -4,13 +4,13 @@ Hier sammeln wir konkrete Beispiele, die du 1:1 nachbauen kannst.
 
 ## Übersicht
 
-- [[PV-Leistung-aus-mehreren-Quellen|PV-Leistung aus mehreren Quellen summieren]]
-- [[Verbrauchergruppen|Verbrauchergruppen zusammenfassen]]
-- [[Hausverbrauch|Hausverbrauch berechnen]]
-- [[Batterie-Leistung-aus-zwei-States|Batterie-Leistung aus zwei Messwerten (Laden/Entladen)]]
-- [[SoC-aus-mehreren-Speichern|SoC aus mehreren Speichern (gewichtet)]]
-- [[Werte-begrenzen|Werte begrenzen / klemmen]]
-- [[PV-Ueberschuss-und-Eigenverbrauch|PV-Überschuss & Eigenverbrauch]]
+- [PV-Leistung aus mehreren Quellen summieren](PV-Leistung-aus-mehreren-Quellen)
+- [Verbrauchergruppen zusammenfassen](Verbrauchergruppen)
+- [Hausverbrauch berechnen](Hausverbrauch)
+- [Batterie-Leistung aus zwei Messwerten (Laden/Entladen)](Batterie-Leistung-aus-zwei-States)
+- [SoC aus mehreren Speichern (gewichtet)](SoC-aus-mehreren-Speichern)
+- [Werte begrenzen / klemmen](Werte-begrenzen)
+- [PV-Überschuss & Eigenverbrauch](PV-Ueberschuss-und-Eigenverbrauch)
 
 ## Beitrag leisten
 
