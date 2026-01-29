@@ -581,9 +581,26 @@
             const getAdapterInstanceId = () => {
                 const adapterName = (props && (props.adapterName || props.adapter)) || 'data-solectrus';
                 const instanceId = props && typeof props.instanceId === 'string' ? props.instanceId : '';
-                if (instanceId && instanceId.includes('.')) return instanceId;
+                if (instanceId && String(instanceId).startsWith('system.adapter.')) return String(instanceId);
+                if (instanceId && /^[a-zA-Z0-9_-]+\.\d+$/.test(String(instanceId))) return String(instanceId);
                 const inst = props && Number.isFinite(props.instance) ? props.instance : 0;
                 return `${adapterName}.${inst}`;
+            };
+
+            const getAdapterSendToTargets = () => {
+                const base = getAdapterInstanceId();
+                if (!base) return [];
+                if (String(base).startsWith('system.adapter.')) {
+                    const short = String(base).slice('system.adapter.'.length);
+                    return [String(base), short].filter(Boolean);
+                }
+                return [String(base), `system.adapter.${String(base)}`];
+            };
+
+            const getAdapterAliveId = () => {
+                const base = getAdapterInstanceId();
+                if (!base) return '';
+                return String(base).startsWith('system.adapter.') ? `${base}.alive` : `system.adapter.${base}.alive`;
             };
 
             const sanitizeInputKey = raw => {
@@ -667,6 +684,22 @@
                     return;
                 }
 
+                // If adapter isn't alive, preview can't work.
+                if (socket && typeof socket.getState === 'function') {
+                    try {
+                        const aliveId = getAdapterAliveId();
+                        if (aliveId) {
+                            const alive = await socket.getState(aliveId);
+                            if (alive && alive.val === false) {
+                                setFormulaPreview({ ok: false, error: t('Adapter not running') });
+                                return;
+                            }
+                        }
+                    } catch {
+                        // ignore
+                    }
+                }
+
                 const inputs = Array.isArray(selectedItem.inputs) ? selectedItem.inputs : [];
                 const vars = Object.create(null);
                 for (const inp of inputs) {
@@ -681,35 +714,52 @@
 
                 setFormulaPreviewLoading(true);
                 try {
-                    const target = getAdapterInstanceId();
                     const payload = { expr: String(formulaDraft || ''), vars };
-                    const res = await new Promise(resolve => {
-                        let done = false;
-                        const timeout = setTimeout(() => {
-                            if (done) return;
-                            done = true;
-                            resolve({ ok: false, error: t('Preview timeout') });
-                        }, 1500);
-                        try {
-                            socket.sendTo(target, 'evalFormulaPreview', payload, reply => {
+                    const targets = getAdapterSendToTargets();
+                    const trySendTo = target =>
+                        new Promise(resolve => {
+                            let done = false;
+                            const timeout = setTimeout(() => {
                                 if (done) return;
                                 done = true;
+                                resolve({ ok: false, error: t('Preview timeout') });
+                            }, 900);
+                            try {
+                                socket.sendTo(target, 'evalFormulaPreview', payload, reply => {
+                                    if (done) return;
+                                    done = true;
+                                    try {
+                                        clearTimeout(timeout);
+                                    } catch {
+                                        // ignore
+                                    }
+                                    resolve(reply && typeof reply === 'object' ? reply : { ok: false, error: t('Preview not available') });
+                                });
+                            } catch {
                                 try {
                                     clearTimeout(timeout);
                                 } catch {
                                     // ignore
                                 }
-                                resolve(reply && typeof reply === 'object' ? reply : { ok: false, error: t('Preview not available') });
-                            });
-                        } catch {
-                            try {
-                                clearTimeout(timeout);
-                            } catch {
-                                // ignore
+                                resolve({ ok: false, error: t('Preview not available') });
                             }
-                            resolve({ ok: false, error: t('Preview not available') });
+                        });
+
+                    let res = null;
+                    for (let i = 0; i < targets.length; i++) {
+                        const r = await trySendTo(targets[i]);
+                        // Consider a non-timeout error as a final response, but retry timeouts on alt target.
+                        if (r && r.ok) {
+                            res = r;
+                            break;
                         }
-                    });
+                        if (r && r.error && String(r.error) !== t('Preview timeout')) {
+                            res = r;
+                            break;
+                        }
+                        res = r;
+                    }
+                    if (!res) res = { ok: false, error: t('Preview not available') };
                     setFormulaPreview(res);
                     if (reason && props && props.onDebug) {
                         try {

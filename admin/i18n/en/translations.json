@@ -51,6 +51,7 @@
   "Refresh preview": "Refresh preview",
   "Preview not available": "Preview not available",
   "Preview timeout": "Preview timeout",
+  "Adapter not running": "Adapter not running",
   "n/a": "n/a",
   "Pick a state id and insert s(\"id\")": "Pick a state id and insert s(\"id\")",
   "Pick a state id and insert v(\"id\")": "Pick a state id and insert v(\"id\")",
