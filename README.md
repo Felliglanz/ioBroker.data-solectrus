@@ -13,7 +13,7 @@ Ziel: Datenpunkte (z.B. PV/Verbrauch/Batterie) per **Formeln** aus beliebigen io
 Der Adapter kann lokal als `.tgz` gebaut und in ioBroker installiert werden (oder via GitHub-Release, falls vorhanden).
 
 - Paket bauen: `npm pack`
-- Installation in ioBroker: Admin → Adapter → „Benutzerdefiniert“ / URL/Datei → `iobroker.data-solectrus-<version>.tgz` (z.B. `iobroker.data-solectrus-0.2.1.tgz`)
+- Installation in ioBroker: Admin → Adapter → „Benutzerdefiniert“ / URL/Datei → `iobroker.data-solectrus-<version>.tgz` (z.B. `iobroker.data-solectrus-0.2.2.tgz`)
 
 Hinweis: Adaptername in ioBroker ist `data-solectrus` (Instanz: `data-solectrus.0`).
 
@@ -29,6 +29,10 @@ Optional (gegen Timing-/Cache-Effekte bei vielen Quellen):
 
 - **Read inputs on tick (snapshot)**: Wenn aktiv, liest der Adapter zu jedem Tick alle benötigten Input-States einmal aktiv via ioBroker und rechnet dann mit diesem „Snapshot“. Das kann kleine Abweichungen reduzieren, wenn mehrere Quellen minimal versetzt updaten.
 - **Snapshot delay (ms)**: Optionaler Delay vor dem Snapshot (z.B. 100–300ms), falls deine Sensoren typischerweise kurz nach dem Tick-Rand updaten.
+
+Optional (Robustheit bei Fehlern):
+
+- **errorRetriesBeforeZero** (noch nicht im Admin-UI): Wie viele fehlgeschlagene Berechnungen pro Item toleriert werden, bevor der Output auf `0` gesetzt wird. Standard: `3`.
 
 ### Werte (Items)
 
@@ -101,17 +105,20 @@ Kompatibilität (optional):
 - `ceil(x)`
 - `clamp(value, min, max)`
 - `IF(condition, valueIfTrue, valueIfFalse)` (Alias: `if(...)`)
+- `jp("state.id", "jsonPath")`
 
-### Beispiel: IF/Strings (z.B. Wärmemenge)
+### Beispiel: IF/Strings aus JSON (z.B. Wärmepumpe / Wärmemenge)
 
-Wenn du Bedingungen gegen **String-States** prüfen willst (z.B. Betriebsmodus), nutze `v("...")`.
+Wichtig: Variablen wie `opMode` existieren nur, wenn du sie als **Input-Key** konfigurierst.
+Wenn du nur *einen* JSON-State hast (z.B. `mqtt.0.espaltherma.ATTR`) und daraus Strings/Numbers brauchst, nutze `jp(stateId, jsonPath)`.
 
-Beispiel (IDs bitte an deine Umgebung anpassen):
+Bei JSON-Keys mit Leerzeichen musst du die Klammer-Notation verwenden: `$['Operation Mode']`.
 
-- Output-Item: z.B. `waerme.erzeugt`
-- Formel:
+Beispiel (alle Werte aus einem JSON-State; IDs bitte an deine Umgebung anpassen):
 
-`IF(v("mqtt.0.hp.operationMode") == 'Heating' && v("mqtt.0.hp.freezeProtection") == 'OFF' && s("mqtt.0.hp.r2t") > s("mqtt.0.hp.r4t"), s("mqtt.0.hp.flow_l_min") * 60.0 * 1.163 * (s("mqtt.0.hp.r2t") - s("mqtt.0.hp.r4t")), 0)`
+`IF(jp('mqtt.0.espaltherma.ATTR', "$['Operation Mode']") == 'Heating' && jp('mqtt.0.espaltherma.ATTR', "$['Freeze Protection']") == 'OFF', (jp('mqtt.0.espaltherma.ATTR', "$['Leaving water temp. before BUH (R1T)']") - jp('mqtt.0.espaltherma.ATTR', "$['Inlet water temp.(R4T)']")) * jp('mqtt.0.espaltherma.ATTR', "$['Flow sensor (l/min)']") * 60.0 * 1.163, 0)`
+
+Wenn du Bedingungen gegen **String-States** (nicht JSON) prüfen willst (z.B. Betriebsmodus als eigener State), nutze `v("...")`.
 
 ### State-Lesen per ID (optional)
 
@@ -123,9 +130,9 @@ Beispiel:
 
 - `s("modbus.0.inputRegisters.12345") * 1000`
 
-Hinweis: Diese States werden nicht automatisch „entdeckt“; verwende dafür idealerweise Inputs oder achte darauf, dass der State existiert und der Adapter ihn lesen kann.
+Hinweis: Diese States sollten idealerweise als Inputs gepflegt werden.
 
-Update: `s("...")` und `v("...")` werden aus der Formel erkannt und als Quellen (Snapshot/Subscribes) berücksichtigt.
+Update: `s("...")`, `v("...")` und `jp("...", "...")` werden aus der Formel erkannt und als Quellen (Snapshot/Subscribes) berücksichtigt.
 
 ## Use-Cases / Beispiele
 
@@ -152,6 +159,13 @@ Unter `data-solectrus.0.info.*` werden Status/Diagnosewerte gepflegt:
 - `info.lastError`: letzter Fehlertext
 - `info.lastRun`: ISO-Timestamp des letzten Ticks
 - `info.evalTimeMs`: Laufzeit der Berechnung im letzten Tick
+
+Zusätzlich gibt es per Item Diagnose-States unter `data-solectrus.0.items.<outputId>.*`:
+
+- `compiledOk`, `compileError`
+- `lastError`, `lastOkTs`, `lastEvalMs`, `consecutiveErrors`
+
+Robustheit: Bei Berechnungsfehlern wird der letzte gültige Wert für einige Retries weitergeschrieben und erst danach auf `0` gesetzt (Default: 3 Retries).
 
 ## Sicherheit / Expression Engine
 

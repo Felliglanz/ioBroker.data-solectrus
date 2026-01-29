@@ -18,6 +18,15 @@ class DataSolectrus extends utils.Adapter {
 
 		this.cache = new Map();
 		this.cacheTs = new Map();
+		// Precompiled per-item cache to keep tick evaluation fast and robust.
+		/** @type {Map<string, {ok:boolean, error?:string, item:any, outputId:string, mode:string, sourceIds:Set<string>, normalizedExpr?:string, ast?:any, constantValue?:any}>} */
+		this.compiledItems = new Map();
+		this.itemsConfigSignature = '';
+		this.subscribedIds = new Set();
+		this.lastGoodValue = new Map();
+		this.lastGoodTs = new Map();
+		this.consecutiveErrorCounts = new Map();
+
 		this.currentSnapshot = null;
 		this.tickTimer = null;
 		this.isUnloading = false;
@@ -59,6 +68,42 @@ class DataSolectrus extends utils.Adapter {
 				this.debugOnce(`v_non_primitive|${key}`, `v("${key}") returned non-primitive (${t}); treating as empty string`);
 				return '';
 			},
+			// Extract a primitive value from a JSON payload using the adapter's minimal JSONPath subset.
+			// Example: jp('mqtt.0.espaltherma.ATTR', "$['Operation Mode']")
+			jp: (id, jsonPath) => {
+				const key = String(id);
+				const raw = (this.currentSnapshot && typeof this.currentSnapshot.get === 'function')
+					? this.currentSnapshot.get(key)
+					: this.cache.get(key);
+				const jp = jsonPath !== undefined && jsonPath !== null ? String(jsonPath).trim() : '';
+				if (!jp) return undefined;
+
+				let obj = null;
+				if (raw && typeof raw === 'object') {
+					obj = raw;
+				} else if (typeof raw === 'string') {
+					const s = raw.trim();
+					if (!s) return undefined;
+					try {
+						obj = JSON.parse(s);
+					} catch (e) {
+						this.debugOnce(
+							`jp_parse_failed|${key}|${jp}`,
+							`jp("${key}", "${jp}") cannot parse JSON: ${e && e.message ? e.message : e}`
+						);
+						return undefined;
+					}
+				} else {
+					return undefined;
+				}
+
+				const extracted = this.applyJsonPath(obj, jp);
+				if (extracted === undefined || extracted === null) return extracted;
+				const t = typeof extracted;
+				if (t === 'string' || t === 'number' || t === 'boolean') return extracted;
+				if (extracted instanceof Date && typeof extracted.toISOString === 'function') return extracted.toISOString();
+				return undefined;
+			},
 			// Read a foreign state value by id from cache (sync, safe).
 			s: id => {
 				const key = String(id);
@@ -72,6 +117,195 @@ class DataSolectrus extends utils.Adapter {
 		this.on('ready', this.onReady.bind(this));
 		this.on('unload', this.onUnload.bind(this));
 		this.on('stateChange', this.onStateChange.bind(this));
+	}
+
+	getErrorRetriesBeforeZero() {
+		const raw = this.config && this.config.errorRetriesBeforeZero !== undefined ? this.config.errorRetriesBeforeZero : 3;
+		const n = Number(raw);
+		// Keep it sane even if not in Admin schema yet.
+		if (!Number.isFinite(n) || n < 0) return 3;
+		return Math.min(100, Math.round(n));
+	}
+
+	getItemsConfigSignature(items) {
+		const arr = Array.isArray(items) ? items : [];
+		// Only include relevant fields; order is stable by array order.
+		const normalized = arr
+			.filter(it => it && typeof it === 'object')
+			.map(it => ({
+				enabled: !!it.enabled,
+				mode: it.mode || 'formula',
+				group: it.group || '',
+				targetId: it.targetId || '',
+				name: it.name || '',
+				type: it.type || '',
+				role: it.role || '',
+				unit: it.unit || '',
+				noNegative: !!it.noNegative,
+				clamp: !!it.clamp,
+				min: it.min,
+				max: it.max,
+				sourceState: it.sourceState || '',
+				jsonPath: it.jsonPath || '',
+				formula: it.formula || '',
+				inputs: Array.isArray(it.inputs)
+					? it.inputs
+						.filter(inp => inp && typeof inp === 'object')
+						.map(inp => ({
+							key: inp.key || '',
+							sourceState: inp.sourceState || '',
+							jsonPath: inp.jsonPath || '',
+							noNegative: !!inp.noNegative,
+						}))
+					: [],
+			}));
+		try {
+			return JSON.stringify(normalized);
+		} catch {
+			// Fallback: should never happen for plain objects
+			return String(Date.now());
+		}
+	}
+
+	compileItem(item) {
+		const mode = item && item.mode ? String(item.mode) : 'formula';
+		const outputId = this.getItemOutputId(item);
+		const sourceIds = new Set(this.collectSourceStatesFromItem(item));
+
+		if (!outputId) {
+			return { ok: false, error: 'Missing/invalid targetId', item, outputId: '', mode, sourceIds };
+		}
+
+		if (mode === 'source') {
+			return { ok: true, item, outputId, mode, sourceIds };
+		}
+
+		const exprRaw = item && item.formula !== undefined && item.formula !== null ? String(item.formula).trim() : '';
+		if (!exprRaw) {
+			// Treat empty formula as constant 0.
+			return { ok: true, item, outputId, mode, sourceIds, normalizedExpr: '', ast: null, constantValue: 0 };
+		}
+
+		const normalized = this.normalizeFormulaExpression(exprRaw);
+		if (normalized && normalized.length > this.MAX_FORMULA_LENGTH) {
+			return {
+				ok: false,
+				error: `Formula too long (>${this.MAX_FORMULA_LENGTH} chars)`,
+				item,
+				outputId,
+				mode,
+				sourceIds,
+				normalizedExpr: normalized,
+			};
+		}
+
+		try {
+			const ast = jsep(String(normalized));
+			this.analyzeAst(ast);
+			return { ok: true, item, outputId, mode, sourceIds, normalizedExpr: normalized, ast };
+		} catch (e) {
+			return {
+				ok: false,
+				error: e && e.message ? e.message : String(e),
+				item,
+				outputId,
+				mode,
+				sourceIds,
+				normalizedExpr: normalized,
+			};
+		}
+	}
+
+	ensureCompiledForCurrentConfig(items) {
+		const sig = this.getItemsConfigSignature(items);
+		if (sig !== this.itemsConfigSignature) {
+			return this.prepareItems();
+		}
+		return Promise.resolve();
+	}
+
+	getItemInfoBaseId(outputId) {
+		return `items.${String(outputId)}`;
+	}
+
+	async ensureItemInfoStatesForCompiled(compiled) {
+		if (!compiled || !compiled.outputId) return;
+		const base = this.getItemInfoBaseId(compiled.outputId);
+
+		await this.ensureChannelPath(`${base}.compiledOk`);
+
+		await this.setObjectNotExistsAsync(`${base}.compiledOk`, {
+			type: 'state',
+			common: {
+				name: 'Compiled OK',
+				type: 'boolean',
+				role: 'indicator',
+				read: true,
+				write: false,
+			},
+			native: {},
+		});
+
+		await this.setObjectNotExistsAsync(`${base}.compileError`, {
+			type: 'state',
+			common: {
+				name: 'Compile Error',
+				type: 'string',
+				role: 'text',
+				read: true,
+				write: false,
+			},
+			native: {},
+		});
+
+		await this.setObjectNotExistsAsync(`${base}.lastError`, {
+			type: 'state',
+			common: {
+				name: 'Last Error',
+				type: 'string',
+				role: 'text',
+				read: true,
+				write: false,
+			},
+			native: {},
+		});
+
+		await this.setObjectNotExistsAsync(`${base}.lastOkTs`, {
+			type: 'state',
+			common: {
+				name: 'Last OK Timestamp',
+				type: 'string',
+				role: 'date',
+				read: true,
+				write: false,
+			},
+			native: {},
+		});
+
+		await this.setObjectNotExistsAsync(`${base}.lastEvalMs`, {
+			type: 'state',
+			common: {
+				name: 'Last Evaluation Time (ms)',
+				type: 'number',
+				role: 'value',
+				read: true,
+				write: false,
+				unit: 'ms',
+			},
+			native: {},
+		});
+
+		await this.setObjectNotExistsAsync(`${base}.consecutiveErrors`, {
+			type: 'state',
+			common: {
+				name: 'Consecutive Errors',
+				type: 'number',
+				role: 'value',
+				read: true,
+				write: false,
+			},
+			native: {},
+		});
 	}
 
 	safeNum(val, fallback = 0) {
@@ -385,6 +619,10 @@ class DataSolectrus extends utils.Adapter {
 		}
 		const ast = jsep(String(normalized));
 		this.analyzeAst(ast);
+		return this.evalFormulaAst(ast, vars);
+	}
+
+	evalFormulaAst(ast, vars) {
 		const funcs = this.formulaFunctions;
 
 		const evalNode = node => {
@@ -661,11 +899,19 @@ class DataSolectrus extends utils.Adapter {
 	}
 
 	async buildSnapshotForTick(items) {
-		const validItems = Array.isArray(items) ? items.filter(it => it && typeof it === 'object') : [];
 		const sourceIds = new Set();
-		for (const item of validItems) {
-			for (const id of this.collectSourceStatesFromItem(item)) {
-				sourceIds.add(id);
+		if (this.compiledItems && this.compiledItems.size > 0) {
+			for (const compiled of this.compiledItems.values()) {
+				for (const id of compiled.sourceIds || []) {
+					sourceIds.add(id);
+				}
+			}
+		} else {
+			const validItems = Array.isArray(items) ? items.filter(it => it && typeof it === 'object') : [];
+			for (const item of validItems) {
+				for (const id of this.collectSourceStatesFromItem(item)) {
+					sourceIds.add(id);
+				}
 			}
 		}
 
@@ -709,12 +955,13 @@ class DataSolectrus extends utils.Adapter {
 					if (inp && inp.sourceState) ids.push(String(inp.sourceState));
 				}
 			}
-			// Also allow s("...") / v("...") in formula; discover these ids so snapshot/subscriptions can include them.
+			// Also allow s("...") / v("...") / jp("...", "...") in formula; discover these ids so snapshot/subscriptions can include them.
 			const expr = item.formula ? String(item.formula) : '';
 			if (expr) {
 				const max = this.MAX_DISCOVERED_STATE_IDS_PER_ITEM;
 				let added = 0;
 				const re = /\b(?:s|v)\(\s*(['"])([^'"\n\r]+)\1\s*\)/g;
+				const reJp = /\bjp\(\s*(['"])([^'"\n\r]+)\1\s*,/g;
 				let m;
 				while ((m = re.exec(expr)) !== null) {
 					const sid = (m[2] || '').trim();
@@ -728,6 +975,22 @@ class DataSolectrus extends utils.Adapter {
 							`Formula contains many s()/v() state reads; limiting discovered ids to ${max} for '${itemId}'`
 						);
 						break;
+					}
+				}
+				if (added < max) {
+					while ((m = reJp.exec(expr)) !== null) {
+						const sid = (m[2] || '').trim();
+						if (!sid) continue;
+						ids.push(sid);
+						added++;
+						if (added >= max) {
+							const itemId = this.getItemDisplayId(item) || (item && item.name ? String(item.name) : 'item');
+							this.warnOnce(
+								`discover_ids_limit|${itemId}`,
+								`Formula contains many s()/v()/jp() state reads; limiting discovered ids to ${max} for '${itemId}'`
+							);
+							break;
+						}
 					}
 				}
 			}
@@ -825,6 +1088,7 @@ class DataSolectrus extends utils.Adapter {
 		const items = Array.isArray(this.config.items) ? this.config.items : [];
 		const validItems = items.filter(it => it && typeof it === 'object');
 		const enabledItems = validItems.filter(it => !!it.enabled);
+		this.itemsConfigSignature = this.getItemsConfigSignature(items);
 
 		await this.setStateAsync('info.itemsConfigured', validItems.length, true);
 		await this.setStateAsync('info.itemsEnabled', enabledItems.length, true);
@@ -833,9 +1097,31 @@ class DataSolectrus extends utils.Adapter {
 			await this.ensureOutputState(item);
 		}
 
-		const sourceIds = new Set();
+		// Compile items once (AST + discovered sourceIds). Errors are stored per item and handled during tick.
+		const compiled = new Map();
 		for (const item of validItems) {
-			for (const id of this.collectSourceStatesFromItem(item)) {
+			const c = this.compileItem(item);
+			if (c && c.outputId) {
+				compiled.set(c.outputId, c);
+			}
+		}
+		this.compiledItems = compiled;
+
+		// Ensure per-item info states and publish compile status.
+		for (const c of this.compiledItems.values()) {
+			try {
+				await this.ensureItemInfoStatesForCompiled(c);
+				const base = this.getItemInfoBaseId(c.outputId);
+				await this.setStateAsync(`${base}.compiledOk`, !!c.ok, true);
+				await this.setStateAsync(`${base}.compileError`, c.ok ? '' : String(c.error || 'compile failed'), true);
+			} catch (e) {
+				this.log.debug(`Cannot create/update item info states: ${e && e.message ? e.message : e}`);
+			}
+		}
+
+		const sourceIds = new Set();
+		for (const c of this.compiledItems.values()) {
+			for (const id of c.sourceIds || []) {
 				sourceIds.add(id);
 			}
 		}
@@ -853,7 +1139,10 @@ class DataSolectrus extends utils.Adapter {
 					this.cache.set(id, state.val);
 				}
 
-				this.subscribeForeignStates(id);
+				if (!this.subscribedIds.has(id)) {
+					this.subscribeForeignStates(id);
+					this.subscribedIds.add(id);
+				}
 			} catch (e) {
 				this.log.warn(`Cannot subscribe/read ${id}: ${e && e.message ? e.message : e}`);
 			}
@@ -936,8 +1225,23 @@ class DataSolectrus extends utils.Adapter {
 		if (!expr) {
 			return 0;
 		}
-
-		const result = this.evalFormula(expr, vars);
+		// Prefer compiled AST if available.
+		const targetId = this.getItemOutputId(item);
+		const compiled = targetId ? this.compiledItems.get(targetId) : null;
+		let result;
+		if (compiled && compiled.ok) {
+			if (compiled.constantValue !== undefined) {
+				result = compiled.constantValue;
+			} else if (compiled.ast) {
+				result = this.evalFormulaAst(compiled.ast, vars);
+			} else {
+				result = this.evalFormula(expr, vars);
+			}
+		} else if (compiled && !compiled.ok) {
+			throw new Error(compiled.error || 'Formula compile failed');
+		} else {
+			result = this.evalFormula(expr, vars);
+		}
 		return this.safeNum(result);
 	}
 
@@ -985,13 +1289,31 @@ class DataSolectrus extends utils.Adapter {
 		const start = Date.now();
 		const items = Array.isArray(this.config.items) ? this.config.items : [];
 		const enabledItems = items.filter(it => it && typeof it === 'object' && it.enabled);
+		const retriesBeforeZero = this.getErrorRetriesBeforeZero();
+
+		// If config changed (without restart), rebuild compiled cache + subscriptions.
+		try {
+			await this.ensureCompiledForCurrentConfig(items);
+		} catch (e) {
+			const msg = e && e.message ? e.message : String(e);
+			this.log.warn(`Prepare items failed: ${msg}`);
+			await this.setStateAsync('info.lastError', msg, true);
+		}
 
 		// Keep status in sync even if config changes without a restart
 		await this.setStateAsync('info.itemsConfigured', items.filter(it => it && typeof it === 'object').length, true);
 		await this.setStateAsync('info.itemsEnabled', enabledItems.length, true);
 		await this.setStateAsync('info.status', enabledItems.length ? 'ok' : 'no_items_enabled', true);
 
-		const snapshot = await this.buildSnapshotForTick(items);
+		let snapshot = null;
+		try {
+			snapshot = await this.buildSnapshotForTick(items);
+		} catch (e) {
+			const msg = e && e.message ? e.message : String(e);
+			this.log.warn(`Snapshot build failed: ${msg}`);
+			await this.setStateAsync('info.lastError', msg, true);
+			snapshot = new Map();
+		}
 		this.currentSnapshot = snapshot;
 
 		for (const item of enabledItems) {
@@ -999,17 +1321,59 @@ class DataSolectrus extends utils.Adapter {
 			if (!targetId) {
 				continue;
 			}
+			const itemStart = Date.now();
+			const itemInfoBase = this.getItemInfoBaseId(targetId);
 
 			try {
 				const raw = await this.computeItemValue(item, snapshot);
 				const valueNum = this.applyResultRules(item, raw);
 				const value = this.castValueForItemType(item, valueNum);
 				await this.setStateAsync(targetId, value, true);
+				this.lastGoodValue.set(targetId, value);
+				this.lastGoodTs.set(targetId, Date.now());
+				this.consecutiveErrorCounts.set(targetId, 0);
+				// Per-item info states (best-effort; must never break tick)
+				try {
+					await this.setStateAsync(`${itemInfoBase}.lastOkTs`, new Date().toISOString(), true);
+					await this.setStateAsync(`${itemInfoBase}.lastEvalMs`, Date.now() - itemStart, true);
+					await this.setStateAsync(`${itemInfoBase}.lastError`, '', true);
+					await this.setStateAsync(`${itemInfoBase}.consecutiveErrors`, 0, true);
+				} catch {
+					// ignore
+				}
 			} catch (e) {
 				const name = item.name || targetId;
-				const msg = `${name}: ${e && e.message ? e.message : e}`;
-				this.log.warn(`Compute failed: ${msg}`);
+				const errMsg = e && e.message ? e.message : String(e);
+				const msg = `${name}: ${errMsg}`;
+				this.warnOnce(`compute_failed|${targetId}`, `Compute failed (will retry/keep last): ${msg}`);
 				await this.setStateAsync('info.lastError', msg, true);
+
+				const prev = this.consecutiveErrorCounts.get(targetId) || 0;
+				const next = prev + 1;
+				this.consecutiveErrorCounts.set(targetId, next);
+				try {
+					await this.setStateAsync(`${itemInfoBase}.lastError`, errMsg, true);
+					await this.setStateAsync(`${itemInfoBase}.lastEvalMs`, Date.now() - itemStart, true);
+					await this.setStateAsync(`${itemInfoBase}.consecutiveErrors`, next, true);
+				} catch {
+					// ignore
+				}
+
+				// Policy: keep last good value for N retries, then set to 0.
+				if (this.lastGoodValue.has(targetId) && next <= retriesBeforeZero) {
+					try {
+						await this.setStateAsync(targetId, this.lastGoodValue.get(targetId), true);
+					} catch {
+						// ignore write errors
+					}
+				} else if (next > retriesBeforeZero) {
+					try {
+						const zero = this.castValueForItemType(item, 0);
+						await this.setStateAsync(targetId, zero, true);
+					} catch {
+						// ignore write errors
+					}
+				}
 			}
 		}
 

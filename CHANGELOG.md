@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.2 - 2026-01-29
+
+### Added
+
+- New formula helper `jp("state.id", "jsonPath")` to read primitive values (string/number/boolean) from JSON payload states via the built-in minimal JSONPath.
+	- This enables conditions like `IF(jp("...", "$['Operation Mode']") == 'Heating', ..., 0)` without requiring separate input states.
+- Per-item diagnostics states under `data-solectrus.0.items.<outputId>.*`:
+	- `compiledOk`, `compileError`, `lastError`, `lastOkTs`, `lastEvalMs`, `consecutiveErrors`.
+
+### Changed
+
+- Robust tick behavior: formula/compile/snapshot failures no longer stop the adapter; errors are handled per item.
+- Fallback behavior on errors: keep the last good value for a few retries, then set the output to `0` (config key `errorRetriesBeforeZero`, default: 3).
+- Performance: formulas are compiled once per item (normalized expression + AST) and reused during ticks; snapshot/subscriptions use compiled source ids.
+- Config change detection: when items change without restart, the adapter rebuilds compiled caches on the next tick.
+
 ## 0.2.1 - 2026-01-29
 
 ### Added
