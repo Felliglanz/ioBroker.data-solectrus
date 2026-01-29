@@ -571,7 +571,7 @@
                 return parts.join('|');
             })();
 
-            const stringifyCompact = (value, maxLen = 70) => {
+            function stringifyCompact(value, maxLen = 70) {
                 if (value === null) return 'null';
                 if (value === undefined) return 'undefined';
                 let str;
@@ -589,7 +589,7 @@
                 str = String(str);
                 if (str.length <= maxLen) return str;
                 return str.slice(0, Math.max(0, maxLen - 1)) + '…';
-            };
+            }
 
             const normalizeFormulaForPreview = expr => {
                 // Keep in sync (loosely) with adapter-side normalization, but only for preview.
