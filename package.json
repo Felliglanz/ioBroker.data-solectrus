@@ -20,6 +20,6 @@
   },
   "scripts": {
     "start": "node main.js",
-    "lint": "node -c main.js"
+	"lint": "node -c main.js && node -c lib/formula.js && node -c lib/jsonpath.js"
   }
 }

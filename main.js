@@ -1,7 +1,17 @@
 'use strict';
 
 const utils = require('@iobroker/adapter-core');
-const jsep = require('jsep');
+const {
+	parseExpression,
+	normalizeFormulaExpression: normalizeFormulaExpressionImpl,
+	analyzeAst: analyzeAstImpl,
+	evalFormulaAst: evalFormulaAstImpl,
+} = require('./lib/formula');
+const {
+	applyJsonPath: applyJsonPathImpl,
+	getNumericFromJsonPath: getNumericFromJsonPathImpl,
+	getValueFromJsonPath: getValueFromJsonPathImpl,
+} = require('./lib/jsonpath');
 
 class DataSolectrus extends utils.Adapter {
 	constructor(options) {
@@ -203,7 +213,7 @@ class DataSolectrus extends utils.Adapter {
 		}
 
 		try {
-			const ast = jsep(String(normalized));
+			const ast = parseExpression(String(normalized));
 			this.analyzeAst(ast);
 			return { ok: true, item, outputId, mode, sourceIds, normalizedExpr: normalized, ast };
 		} catch (e) {
@@ -342,226 +352,27 @@ class DataSolectrus extends utils.Adapter {
 	 * Not supported: filters, wildcards, unions, recursive descent, functions.
 	 */
 	applyJsonPath(obj, path) {
-		if (!path) return undefined;
-		let p = String(path).trim();
-		if (!p) return undefined;
-
-		// Accept both "$.x" and ".x" as a convenience.
-		if (p.startsWith('.')) {
-			p = `$${p}`;
-		}
-		if (!p.startsWith('$')) {
-			return undefined;
-		}
-
-		let cur = obj;
-		let i = 1; // skip '$'
-		const len = p.length;
-		const isDangerousKey = k => k === '__proto__' || k === 'prototype' || k === 'constructor';
-		while (i < len) {
-			const ch = p[i];
-			if (ch === '.') {
-				i++;
-				let start = i;
-				while (i < len && /[A-Za-z0-9_]/.test(p[i])) i++;
-				const key = p.slice(start, i);
-				if (!key) return undefined;
-				if (isDangerousKey(key)) return undefined;
-				if (cur === null || cur === undefined) return undefined;
-				cur = cur[key];
-				continue;
-			}
-			if (ch === '[') {
-				i++;
-				while (i < len && /\s/.test(p[i])) i++;
-				if (i >= len) return undefined;
-				const quote = p[i] === '"' || p[i] === "'" ? p[i] : null;
-				if (quote) {
-					i++;
-					let str = '';
-					while (i < len) {
-						const c = p[i];
-						if (c === '\\') {
-							if (i + 1 < len) {
-								str += p[i + 1];
-								i += 2;
-								continue;
-							}
-							return undefined;
-						}
-						if (c === quote) {
-							i++;
-							break;
-						}
-						str += c;
-						i++;
-					}
-					while (i < len && /\s/.test(p[i])) i++;
-					if (p[i] !== ']') return undefined;
-					i++;
-					if (isDangerousKey(str)) return undefined;
-					if (cur === null || cur === undefined) return undefined;
-					cur = cur[str];
-					continue;
-				}
-
-				// array index
-				let start = i;
-				while (i < len && /[0-9]/.test(p[i])) i++;
-				const numStr = p.slice(start, i);
-				while (i < len && /\s/.test(p[i])) i++;
-				if (p[i] !== ']') return undefined;
-				i++;
-				const idx = Number(numStr);
-				if (!Number.isInteger(idx)) return undefined;
-				if (!Array.isArray(cur)) return undefined;
-				cur = cur[idx];
-				continue;
-			}
-
-			// Unknown token
-			return undefined;
-		}
-		return cur;
+		return applyJsonPathImpl(obj, path);
 	}
 
 	analyzeAst(ast) {
-		const maxNodes = this.MAX_AST_NODES;
-		const maxDepth = this.MAX_AST_DEPTH;
-		let nodes = 0;
-		let depthMax = 0;
-		/** @type {{node:any, depth:number}[]} */
-		const stack = [{ node: ast, depth: 1 }];
-		while (stack.length) {
-			const entry = stack.pop();
-			const node = entry && entry.node;
-			const depth = entry && entry.depth ? entry.depth : 1;
-			if (!node || typeof node !== 'object') continue;
-			nodes++;
-			if (depth > depthMax) depthMax = depth;
-			if (nodes > maxNodes) {
-				throw new Error(`Expression too complex (>${maxNodes} nodes)`);
-			}
-			if (depthMax > maxDepth) {
-				throw new Error(`Expression too deeply nested (>${maxDepth})`);
-			}
-
-			switch (node.type) {
-				case 'BinaryExpression':
-				case 'LogicalExpression':
-					stack.push({ node: node.right, depth: depth + 1 });
-					stack.push({ node: node.left, depth: depth + 1 });
-					break;
-				case 'UnaryExpression':
-					stack.push({ node: node.argument, depth: depth + 1 });
-					break;
-				case 'ConditionalExpression':
-					stack.push({ node: node.alternate, depth: depth + 1 });
-					stack.push({ node: node.consequent, depth: depth + 1 });
-					stack.push({ node: node.test, depth: depth + 1 });
-					break;
-				case 'CallExpression': {
-					const args = Array.isArray(node.arguments) ? node.arguments : [];
-					for (let i = args.length - 1; i >= 0; i--) {
-						stack.push({ node: args[i], depth: depth + 1 });
-					}
-					// callee is an Identifier in allowed expressions; no need to traverse.
-					break;
-				}
-				default:
-					break;
-			}
-		}
-		return { nodes, depth: depthMax };
+		return analyzeAstImpl(ast, { maxNodes: this.MAX_AST_NODES, maxDepth: this.MAX_AST_DEPTH });
 	}
 
 	getNumericFromJsonPath(rawValue, jsonPath, warnKeyPrefix = '') {
-		const jp = jsonPath !== undefined && jsonPath !== null ? String(jsonPath).trim() : '';
-		if (!jp) {
-			return this.safeNum(rawValue);
-		}
-
-		// Be forgiving: if the value is already numeric-ish, just use it.
-		// This allows mixed setups where a state sometimes is numeric and sometimes JSON-string.
-		if (typeof rawValue === 'number' || typeof rawValue === 'boolean') {
-			this.debugOnce(
-				`jsonpath_skipped_numeric|${warnKeyPrefix || ''}`,
-				`JSONPath '${jp}' skipped because source value is already ${typeof rawValue} (${warnKeyPrefix || 'no-prefix'})`
-			);
-			return this.safeNum(rawValue);
-		}
-
-		let obj = null;
-		if (rawValue && typeof rawValue === 'object') {
-			obj = rawValue;
-		} else if (typeof rawValue === 'string') {
-			const s = rawValue.trim();
-			if (!s) {
-				this.warnOnce(`${warnKeyPrefix}|empty`, `JSONPath configured but source value is empty (${jp})`);
-				return 0;
-			}
-			try {
-				obj = JSON.parse(s);
-			} catch (e) {
-				this.warnOnce(
-					`${warnKeyPrefix}|parse`,
-					`Cannot parse JSON for JSONPath ${jp}: ${e && e.message ? e.message : e}`
-				);
-				return 0;
-			}
-		} else {
-			this.warnOnce(`${warnKeyPrefix}|type`, `JSONPath configured but source value is not JSON (${typeof rawValue}) (${jp})`);
-			return 0;
-		}
-
-		const extracted = this.applyJsonPath(obj, jp);
-		if (extracted === undefined) {
-			this.warnOnce(`${warnKeyPrefix}|path`, `JSONPath did not match any value: ${jp}`);
-			return 0;
-		}
-		return this.safeNum(extracted);
+		return getNumericFromJsonPathImpl(rawValue, jsonPath, {
+			safeNum: this.safeNum.bind(this),
+			warnOnce: this.warnOnce.bind(this),
+			debugOnce: this.debugOnce.bind(this),
+			warnKeyPrefix,
+		});
 	}
 
 	getValueFromJsonPath(rawValue, jsonPath, warnKeyPrefix = '') {
-		const jp = jsonPath !== undefined && jsonPath !== null ? String(jsonPath).trim() : '';
-		if (!jp) {
-			return rawValue;
-		}
-
-		let obj = null;
-		if (rawValue && typeof rawValue === 'object') {
-			obj = rawValue;
-		} else if (typeof rawValue === 'string') {
-			const s = rawValue.trim();
-			if (!s) {
-				this.warnOnce(`${warnKeyPrefix}|empty`, `JSONPath configured but source value is empty (${jp})`);
-				return undefined;
-			}
-			try {
-				obj = JSON.parse(s);
-			} catch (e) {
-				this.warnOnce(
-					`${warnKeyPrefix}|parse`,
-					`Cannot parse JSON for JSONPath ${jp}: ${e && e.message ? e.message : e}`
-				);
-				return undefined;
-			}
-		} else {
-			this.warnOnce(`${warnKeyPrefix}|type`, `JSONPath configured but source value is not JSON (${typeof rawValue}) (${jp})`);
-			return undefined;
-		}
-
-		const extracted = this.applyJsonPath(obj, jp);
-		if (extracted === undefined) {
-			this.warnOnce(`${warnKeyPrefix}|path`, `JSONPath did not match any value: ${jp}`);
-			return undefined;
-		}
-		if (extracted === null) return null;
-		const t = typeof extracted;
-		if (t === 'string' || t === 'number' || t === 'boolean') return extracted;
-		if (extracted instanceof Date && typeof extracted.toISOString === 'function') return extracted.toISOString();
-		// Keep formulas deterministic: do not expose objects/arrays.
-		return undefined;
+		return getValueFromJsonPathImpl(rawValue, jsonPath, {
+			warnOnce: this.warnOnce.bind(this),
+			warnKeyPrefix,
+		});
 	}
 
 	/**
@@ -572,89 +383,7 @@ class DataSolectrus extends utils.Adapter {
 	 * This is intentionally conservative and only runs outside quoted strings.
 	 */
 	normalizeFormulaExpression(expr) {
-		let s = String(expr);
-		if (!s) return s;
-
-		let out = '';
-		let inSingle = false;
-		let inDouble = false;
-		let escaped = false;
-
-		const isWordChar = c => /[A-Za-z0-9_]/.test(c);
-		const at = i => (i >= 0 && i < s.length ? s[i] : '');
-		const matchWordAt = (i, word) => {
-			// assumes already outside quotes
-			const w = String(word);
-			if (s.substr(i, w.length).toUpperCase() !== w.toUpperCase()) return false;
-			const prev = at(i - 1);
-			const next = at(i + w.length);
-			if (prev && isWordChar(prev)) return false;
-			if (next && isWordChar(next)) return false;
-			return true;
-		};
-
-		for (let i = 0; i < s.length; i++) {
-			const ch = s[i];
-
-			if (escaped) {
-				out += ch;
-				escaped = false;
-				continue;
-			}
-			if (ch === '\\') {
-				out += ch;
-				escaped = true;
-				continue;
-			}
-
-			if (!inDouble && ch === "'") {
-				inSingle = !inSingle;
-				out += ch;
-				continue;
-			}
-			if (!inSingle && ch === '"') {
-				inDouble = !inDouble;
-				out += ch;
-				continue;
-			}
-
-			if (inSingle || inDouble) {
-				out += ch;
-				continue;
-			}
-
-			// AND/OR/NOT keywords
-			if (matchWordAt(i, 'AND')) {
-				out += '&&';
-				i += 2;
-				continue;
-			}
-			if (matchWordAt(i, 'OR')) {
-				out += '||';
-				i += 1;
-				continue;
-			}
-			if (matchWordAt(i, 'NOT')) {
-				out += '!';
-				i += 2;
-				continue;
-			}
-
-			// single '=' -> '==' (but keep ==, ===, !=, <=, >=)
-			if (ch === '=') {
-				const prev = at(i - 1);
-				const next = at(i + 1);
-				const prevIsGuard = prev === '=' || prev === '!' || prev === '<' || prev === '>';
-				if (!prevIsGuard && next !== '=') {
-					out += '==';
-					continue;
-				}
-			}
-
-			out += ch;
-		}
-
-		return out;
+		return normalizeFormulaExpressionImpl(expr);
 	}
 
 	evalFormula(expr, vars) {
@@ -662,100 +391,13 @@ class DataSolectrus extends utils.Adapter {
 		if (normalized && normalized.length > this.MAX_FORMULA_LENGTH) {
 			throw new Error(`Formula too long (>${this.MAX_FORMULA_LENGTH} chars)`);
 		}
-		const ast = jsep(String(normalized));
+		const ast = parseExpression(String(normalized));
 		this.analyzeAst(ast);
 		return this.evalFormulaAst(ast, vars);
 	}
 
 	evalFormulaAst(ast, vars) {
-		const funcs = this.formulaFunctions;
-
-		const evalNode = node => {
-			if (!node || typeof node !== 'object') {
-				throw new Error('Invalid expression');
-			}
-
-			switch (node.type) {
-				case 'Literal':
-					return node.value;
-				case 'Identifier':
-					return Object.prototype.hasOwnProperty.call(vars, node.name) ? vars[node.name] : 0;
-				case 'UnaryExpression': {
-					const arg = evalNode(node.argument);
-					switch (node.operator) {
-						case '+':
-							return Number(arg);
-						case '-':
-							return -Number(arg);
-						case '!':
-							return !arg;
-						default:
-							throw new Error(`Operator not allowed: ${node.operator}`);
-					}
-				}
-				case 'BinaryExpression':
-				case 'LogicalExpression': {
-					const left = evalNode(node.left);
-					const right = evalNode(node.right);
-					switch (node.operator) {
-						case '+':
-							return Number(left) + Number(right);
-						case '-':
-							return Number(left) - Number(right);
-						case '*':
-							return Number(left) * Number(right);
-						case '/':
-							return Number(left) / Number(right);
-						case '%':
-							return Number(left) % Number(right);
-						case '&&':
-							return left && right;
-						case '||':
-							return left || right;
-						case '==':
-							// loose equality intentionally supported for compatibility with other formula engines
-							return left == right;
-						case '!=':
-							return left != right;
-						case '===':
-							return left === right;
-						case '!==':
-							return left !== right;
-						case '<':
-							return Number(left) < Number(right);
-						case '<=':
-							return Number(left) <= Number(right);
-						case '>':
-							return Number(left) > Number(right);
-						case '>=':
-							return Number(left) >= Number(right);
-						default:
-							throw new Error(`Operator not allowed: ${node.operator}`);
-					}
-				}
-				case 'ConditionalExpression': {
-					const test = evalNode(node.test);
-					return test ? evalNode(node.consequent) : evalNode(node.alternate);
-				}
-				case 'CallExpression': {
-					if (!node.callee || node.callee.type !== 'Identifier') {
-						throw new Error('Only simple function calls are allowed');
-					}
-					const fnName = node.callee.name;
-					const fn = funcs[fnName];
-					if (typeof fn !== 'function') {
-						throw new Error(`Function not allowed: ${fnName}`);
-					}
-					const args = Array.isArray(node.arguments) ? node.arguments.map(evalNode) : [];
-					return fn.apply(null, args);
-				}
-				default:
-					// Blocks MemberExpression, ThisExpression, NewExpression, etc.
-					throw new Error(`Expression type not allowed: ${node.type}`);
-			}
-		};
-
-		return evalNode(ast);
+		return evalFormulaAstImpl(ast, vars, this.formulaFunctions);
 	}
 
 	getTickIntervalMs() {
@@ -999,7 +641,7 @@ class DataSolectrus extends utils.Adapter {
 		return desired;
 	}
 
-	async syncSubscriptions(desiredIds) {
+	syncSubscriptions(desiredIds) {
 		const desired = desiredIds instanceof Set ? desiredIds : new Set();
 
 		// Unsubscribe stale ids
@@ -1271,7 +913,7 @@ class DataSolectrus extends utils.Adapter {
 		}
 
 		const sourceIds = this.getDesiredSourceIdsForItems(items);
-		await this.syncSubscriptions(sourceIds);
+		this.syncSubscriptions(sourceIds);
 
 		for (const id of sourceIds) {
 			try {
