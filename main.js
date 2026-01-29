@@ -26,6 +26,9 @@ class DataSolectrus extends utils.Adapter {
 			round: Math.round,
 			floor: Math.floor,
 			ceil: Math.ceil,
+			// IF(condition, valueIfTrue, valueIfFalse)
+			IF: (condition, valueIfTrue, valueIfFalse) => (condition ? valueIfTrue : valueIfFalse),
+			if: (condition, valueIfTrue, valueIfFalse) => (condition ? valueIfTrue : valueIfFalse),
 			clamp: (value, min, max) => {
 				const v = Number(value);
 				const lo = Number(min);
@@ -34,6 +37,14 @@ class DataSolectrus extends utils.Adapter {
 				if (Number.isFinite(lo) && v < lo) return lo;
 				if (Number.isFinite(hi) && v > hi) return hi;
 				return v;
+			},
+			// Read a foreign state value by id from cache/snapshot (raw; string/boolean/number).
+			v: id => {
+				const key = String(id);
+				if (this.currentSnapshot && typeof this.currentSnapshot.get === 'function') {
+					return this.currentSnapshot.get(key);
+				}
+				return this.cache.get(key);
 			},
 			// Read a foreign state value by id from cache (sync, safe).
 			s: id => {
@@ -208,8 +219,102 @@ class DataSolectrus extends utils.Adapter {
 		return this.safeNum(extracted);
 	}
 
+	/**
+	 * Normalizes some common non-JS formula syntax into the JS-like operators that `jsep` understands.
+	 * - AND/OR/NOT (case-insensitive) -> && / || / !
+	 * - single '=' (outside strings) -> '=='
+	 *
+	 * This is intentionally conservative and only runs outside quoted strings.
+	 */
+	normalizeFormulaExpression(expr) {
+		let s = String(expr);
+		if (!s) return s;
+
+		let out = '';
+		let inSingle = false;
+		let inDouble = false;
+		let escaped = false;
+
+		const isWordChar = c => /[A-Za-z0-9_]/.test(c);
+		const at = i => (i >= 0 && i < s.length ? s[i] : '');
+		const matchWordAt = (i, word) => {
+			// assumes already outside quotes
+			const w = String(word);
+			if (s.substr(i, w.length).toUpperCase() !== w.toUpperCase()) return false;
+			const prev = at(i - 1);
+			const next = at(i + w.length);
+			if (prev && isWordChar(prev)) return false;
+			if (next && isWordChar(next)) return false;
+			return true;
+		};
+
+		for (let i = 0; i < s.length; i++) {
+			const ch = s[i];
+
+			if (escaped) {
+				out += ch;
+				escaped = false;
+				continue;
+			}
+			if (ch === '\\') {
+				out += ch;
+				escaped = true;
+				continue;
+			}
+
+			if (!inDouble && ch === "'") {
+				inSingle = !inSingle;
+				out += ch;
+				continue;
+			}
+			if (!inSingle && ch === '"') {
+				inDouble = !inDouble;
+				out += ch;
+				continue;
+			}
+
+			if (inSingle || inDouble) {
+				out += ch;
+				continue;
+			}
+
+			// AND/OR/NOT keywords
+			if (matchWordAt(i, 'AND')) {
+				out += '&&';
+				i += 2;
+				continue;
+			}
+			if (matchWordAt(i, 'OR')) {
+				out += '||';
+				i += 1;
+				continue;
+			}
+			if (matchWordAt(i, 'NOT')) {
+				out += '!';
+				i += 2;
+				continue;
+			}
+
+			// single '=' -> '==' (but keep ==, ===, !=, <=, >=)
+			if (ch === '=') {
+				const prev = at(i - 1);
+				const next = at(i + 1);
+				const prevIsGuard = prev === '=' || prev === '!' || prev === '<' || prev === '>';
+				if (!prevIsGuard && next !== '=') {
+					out += '==';
+					continue;
+				}
+			}
+
+			out += ch;
+		}
+
+		return out;
+	}
+
 	evalFormula(expr, vars) {
-		const ast = jsep(String(expr));
+		const normalized = this.normalizeFormulaExpression(expr);
+		const ast = jsep(String(normalized));
 		const funcs = this.formulaFunctions;
 
 		const evalNode = node => {
@@ -254,6 +359,11 @@ class DataSolectrus extends utils.Adapter {
 							return left && right;
 						case '||':
 							return left || right;
+						case '==':
+							// loose equality intentionally supported for compatibility with other formula engines
+							return left == right;
+						case '!=':
+							return left != right;
 						case '===':
 							return left === right;
 						case '!==':
@@ -529,7 +639,16 @@ class DataSolectrus extends utils.Adapter {
 					if (inp && inp.sourceState) ids.push(String(inp.sourceState));
 				}
 			}
-			// also allow s("...") in formula; those states are not discoverable automatically
+			// Also allow s("...") / v("...") in formula; discover these ids so snapshot/subscriptions can include them.
+			const expr = item.formula ? String(item.formula) : '';
+			if (expr) {
+				const re = /\b(?:s|v)\(\s*(['"])([^'"\n\r]+)\1\s*\)/g;
+				let m;
+				while ((m = re.exec(expr)) !== null) {
+					const sid = (m[2] || '').trim();
+					if (sid) ids.push(sid);
+				}
+			}
 		}
 		return ids;
 	}

@@ -81,9 +81,14 @@ Beispiel:
 ### Erlaubte Operatoren
 
 - Arithmetik: `+ - * / %`
-- Vergleiche: `< <= > >= === !==`
+- Vergleiche: `< <= > >= == != === !==`
 - Logik: `&& || !`
 - Ternary: `bedingung ? a : b`
+
+Kompatibilität (optional):
+
+- `AND`, `OR`, `NOT` werden (außerhalb von Strings) automatisch zu `&&`, `||`, `!` normalisiert.
+- Ein einzelnes `=` wird (außerhalb von Strings) automatisch zu `==` normalisiert.
 
 ### Erlaubte Funktionen
 
@@ -95,16 +100,32 @@ Beispiel:
 - `floor(x)`
 - `ceil(x)`
 - `clamp(value, min, max)`
+- `IF(condition, valueIfTrue, valueIfFalse)` (Alias: `if(...)`)
+
+### Beispiel: IF/Strings (z.B. Wärmemenge)
+
+Wenn du Bedingungen gegen **String-States** prüfen willst (z.B. Betriebsmodus), nutze `v("...")`.
+
+Beispiel (IDs bitte an deine Umgebung anpassen):
+
+- Output-Item: z.B. `waerme.erzeugt`
+- Formel:
+
+`IF(v("mqtt.0.hp.operationMode") == 'Heating' && v("mqtt.0.hp.freezeProtection") == 'OFF' && s("mqtt.0.hp.r2t") > s("mqtt.0.hp.r4t"), s("mqtt.0.hp.flow_l_min") * 60.0 * 1.163 * (s("mqtt.0.hp.r2t") - s("mqtt.0.hp.r4t")), 0)`
 
 ### State-Lesen per ID (optional)
 
 Du kannst zusätzlich `s("voll.qualifizierter.state")` verwenden, um einen Wert direkt aus dem Cache zu lesen.
+
+Wenn du den **rohen** Wert (z.B. Strings wie `"Heating"`/`"OFF"` oder Booleans) brauchst, verwende `v("voll.qualifizierter.state")`.
 
 Beispiel:
 
 - `s("modbus.0.inputRegisters.12345") * 1000`
 
 Hinweis: Diese States werden nicht automatisch „entdeckt“; verwende dafür idealerweise Inputs oder achte darauf, dass der State existiert und der Adapter ihn lesen kann.
+
+Update: `s("...")` und `v("...")` werden aus der Formel erkannt und als Quellen (Snapshot/Subscribes) berücksichtigt.
 
 ## Use-Cases / Beispiele
 

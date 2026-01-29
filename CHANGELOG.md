@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1 - 2026-01-29
+
+### Added
+
+- Formula function `IF(condition, valueIfTrue, valueIfFalse)` (alias: `if(...)`).
+- Helper `v("state.id")` to read raw foreign state values (string/boolean/number) from cache/snapshot.
+- Compatibility normalization in formulas (outside strings): `AND`/`OR`/`NOT` and single `=`.
+
+### Changed
+
+- Expression engine: re-introduced `==` and `!=` for compatibility with existing formula styles (use `===`/`!==` when you want strict matching).
+- `s("...")` / `v("...")` state ids are now discovered from formulas and included in snapshot/subscriptions.
+
 ## 0.2.0 - 2026-01-29
 
 ### Added
