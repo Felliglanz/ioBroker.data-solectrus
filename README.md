@@ -13,7 +13,7 @@ Ziel: Datenpunkte (z.B. PV/Verbrauch/Batterie) per **Formeln** aus beliebigen io
 Der Adapter kann lokal als `.tgz` gebaut und in ioBroker installiert werden (oder via GitHub-Release, falls vorhanden).
 
 - Paket bauen: `npm pack`
-- Installation in ioBroker: Admin → Adapter → „Benutzerdefiniert“ / URL/Datei → `iobroker.data-solectrus-<version>.tgz` (z.B. `iobroker.data-solectrus-0.2.3.tgz`)
+- Installation in ioBroker: Admin → Adapter → „Benutzerdefiniert“ / URL/Datei → `iobroker.data-solectrus-<version>.tgz` (z.B. `iobroker.data-solectrus-0.2.4.tgz`)
 
 Hinweis: Adaptername in ioBroker ist `data-solectrus` (Instanz: `data-solectrus.0`).
 
@@ -162,6 +162,8 @@ Unter `data-solectrus.0.info.*` werden Status/Diagnosewerte gepflegt:
 - `info.lastError`: letzter Fehlertext
 - `info.lastRun`: ISO-Timestamp des letzten Ticks
 - `info.evalTimeMs`: Laufzeit der Berechnung im letzten Tick
+- `info.timeBudgetMs`: Zeitbudget pro Tick (ms)
+- `info.skippedItems`: Anzahl Items, die im letzten Tick wegen Zeitbudget übersprungen wurden
 
 Zusätzlich gibt es per Item Diagnose-States unter `data-solectrus.0.items.<outputId>.*`:
 

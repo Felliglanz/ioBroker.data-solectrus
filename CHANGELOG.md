@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.4 - 2026-01-29
+
+### Added
+
+- Subscription management hardening: subscriptions are now derived from enabled items and kept in sync (unsubscribe removed ids). A global cap prevents runaway subscription counts.
+- Tick time budget to avoid long ticks piling up; new telemetry states: `info.timeBudgetMs` and `info.skippedItems`.
+
+### Fixed
+
+- Output type consistency: formula results are no longer forced numeric for `string`/`boolean`/`mixed` outputs.
+- Fallback after repeated errors is now type-appropriate (e.g. `''` for string outputs instead of `'0'`).
+
 ## 0.2.3 - 2026-01-29
 
 ### Fixed

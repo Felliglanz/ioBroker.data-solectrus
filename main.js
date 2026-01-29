@@ -15,6 +15,9 @@ class DataSolectrus extends utils.Adapter {
 		this.MAX_AST_NODES = 2000;
 		this.MAX_AST_DEPTH = 60;
 		this.MAX_DISCOVERED_STATE_IDS_PER_ITEM = 250;
+		// Global caps to keep runtime behavior predictable even with huge configs.
+		this.MAX_TOTAL_SOURCE_IDS = 5000;
+		this.TICK_TIME_BUDGET_RATIO = 0.8;
 
 		this.cache = new Map();
 		this.cacheTs = new Map();
@@ -896,12 +899,132 @@ class DataSolectrus extends utils.Adapter {
 			native: {},
 		});
 
+		await this.setObjectNotExistsAsync('info.timeBudgetMs', {
+			type: 'state',
+			common: {
+				name: 'Tick time budget (ms)',
+				type: 'number',
+				role: 'value',
+				unit: 'ms',
+				read: true,
+				write: false,
+			},
+			native: {},
+		});
+
+		await this.setObjectNotExistsAsync('info.skippedItems', {
+			type: 'state',
+			common: {
+				name: 'Skipped items (last tick)',
+				type: 'number',
+				role: 'value',
+				read: true,
+				write: false,
+			},
+			native: {},
+		});
+
 		await this.setStateAsync('info.status', 'starting', true);
 		await this.setStateAsync('info.itemsConfigured', 0, true);
 		await this.setStateAsync('info.itemsEnabled', 0, true);
 		await this.setStateAsync('info.lastError', '', true);
 		await this.setStateAsync('info.lastRun', '', true);
 		await this.setStateAsync('info.evalTimeMs', 0, true);
+		await this.setStateAsync('info.timeBudgetMs', 0, true);
+		await this.setStateAsync('info.skippedItems', 0, true);
+	}
+
+	getTickTimeBudgetMs() {
+		const interval = this.getTickIntervalMs();
+		const ratioRaw = Number(this.TICK_TIME_BUDGET_RATIO);
+		const ratio = Number.isFinite(ratioRaw) && ratioRaw > 0 && ratioRaw <= 1 ? ratioRaw : 0.8;
+		return Math.max(0, Math.floor(interval * ratio));
+	}
+
+	getMaxTotalSourceIds() {
+		const raw = Number(this.MAX_TOTAL_SOURCE_IDS);
+		if (!Number.isFinite(raw) || raw <= 0) return 5000;
+		return Math.min(50000, Math.round(raw));
+	}
+
+	isNumericOutputItem(item) {
+		const t = item && item.type ? String(item.type) : '';
+		// Only these should be forced numeric and get clamping/noNegative rules.
+		return t === '' || t === 'number';
+	}
+
+	getZeroValueForItem(item) {
+		const t = item && item.type ? String(item.type) : '';
+		if (t === 'string') return '';
+		if (t === 'boolean') return false;
+		// number/mixed (and default)
+		return 0;
+	}
+
+	getDesiredSourceIdsForItems(items) {
+		const enabledItems = Array.isArray(items)
+			? items.filter(it => it && typeof it === 'object' && it.enabled)
+			: [];
+
+		const desired = new Set();
+		for (const item of enabledItems) {
+			const out = this.getItemOutputId(item);
+			const compiled = out ? this.compiledItems.get(out) : null;
+			if (compiled && compiled.sourceIds) {
+				for (const id of compiled.sourceIds) {
+					if (id) desired.add(String(id));
+				}
+			} else {
+				for (const id of this.collectSourceStatesFromItem(item)) {
+					if (id) desired.add(String(id));
+				}
+			}
+		}
+
+		const cap = this.getMaxTotalSourceIds();
+		if (desired.size > cap) {
+			const kept = new Set();
+			let n = 0;
+			for (const id of desired) {
+				kept.add(id);
+				n++;
+				if (n >= cap) break;
+			}
+			this.warnOnce(
+				`source_ids_cap|${cap}`,
+				`Too many source state ids (${desired.size}); limiting subscriptions/snapshot to first ${cap}. Please reduce configured items/inputs.`
+			);
+			return kept;
+		}
+		return desired;
+	}
+
+	async syncSubscriptions(desiredIds) {
+		const desired = desiredIds instanceof Set ? desiredIds : new Set();
+
+		// Unsubscribe stale ids
+		for (const id of Array.from(this.subscribedIds)) {
+			if (!desired.has(id)) {
+				try {
+					this.unsubscribeForeignStates(id);
+				} catch (e) {
+					this.log.debug(`Cannot unsubscribe ${id}: ${e && e.message ? e.message : e}`);
+				} finally {
+					this.subscribedIds.delete(id);
+				}
+			}
+		}
+
+		// Subscribe missing ids
+		for (const id of desired) {
+			if (this.subscribedIds.has(id)) continue;
+			try {
+				this.subscribeForeignStates(id);
+				this.subscribedIds.add(id);
+			} catch (e) {
+				this.log.warn(`Cannot subscribe ${id}: ${e && e.message ? e.message : e}`);
+			}
+		}
 	}
 
 	async onReady() {
@@ -941,21 +1064,7 @@ class DataSolectrus extends utils.Adapter {
 	}
 
 	async buildSnapshotForTick(items) {
-		const sourceIds = new Set();
-		if (this.compiledItems && this.compiledItems.size > 0) {
-			for (const compiled of this.compiledItems.values()) {
-				for (const id of compiled.sourceIds || []) {
-					sourceIds.add(id);
-				}
-			}
-		} else {
-			const validItems = Array.isArray(items) ? items.filter(it => it && typeof it === 'object') : [];
-			for (const item of validItems) {
-				for (const id of this.collectSourceStatesFromItem(item)) {
-					sourceIds.add(id);
-				}
-			}
-		}
+		const sourceIds = this.getDesiredSourceIdsForItems(items);
 
 		if (this.getUseSnapshotReads()) {
 			const delay = this.getSnapshotDelayMs();
@@ -1161,12 +1270,8 @@ class DataSolectrus extends utils.Adapter {
 			}
 		}
 
-		const sourceIds = new Set();
-		for (const c of this.compiledItems.values()) {
-			for (const id of c.sourceIds || []) {
-				sourceIds.add(id);
-			}
-		}
+		const sourceIds = this.getDesiredSourceIdsForItems(items);
+		await this.syncSubscriptions(sourceIds);
 
 		for (const id of sourceIds) {
 			try {
@@ -1181,10 +1286,6 @@ class DataSolectrus extends utils.Adapter {
 					this.cache.set(id, state.val);
 				}
 
-				if (!this.subscribedIds.has(id)) {
-					this.subscribeForeignStates(id);
-					this.subscribedIds.add(id);
-				}
 			} catch (e) {
 				this.log.warn(`Cannot subscribe/read ${id}: ${e && e.message ? e.message : e}`);
 			}
@@ -1235,7 +1336,7 @@ class DataSolectrus extends utils.Adapter {
 		}
 
 		const inputs = Array.isArray(item.inputs) ? item.inputs : [];
-		/** @type {Record<string, number>} */
+		/** @type {Record<string, any>} */
 		const vars = Object.create(null);
 
 		for (const inp of inputs) {
@@ -1300,7 +1401,7 @@ class DataSolectrus extends utils.Adapter {
 		} else {
 			result = this.evalFormula(expr, vars);
 		}
-		return this.safeNum(result);
+		return result;
 	}
 
 	applyResultRules(item, value) {
@@ -1331,16 +1432,27 @@ class DataSolectrus extends utils.Adapter {
 		const t = item && item.type ? String(item.type) : '';
 		if (t === 'boolean') {
 			// ioBroker boolean states should receive real booleans.
-			const n = this.safeNum(value);
-			return n !== 0;
+			if (typeof value === 'boolean') return value;
+			if (typeof value === 'number') return Number.isFinite(value) ? value !== 0 : false;
+			if (typeof value === 'string') {
+				const s = value.trim().toLowerCase();
+				if (s === 'true' || s === 'on' || s === 'yes' || s === '1') return true;
+				if (s === 'false' || s === 'off' || s === 'no' || s === '0' || s === '') return false;
+				const n = Number(value);
+				return Number.isFinite(n) ? n !== 0 : false;
+			}
+			return false;
 		}
 		if (t === 'string') {
 			// Always write a real string.
 			if (value === undefined || value === null) return '';
 			return String(value);
 		}
-		// number/mixed (and default)
-		return value;
+		if (t === 'mixed') {
+			return value;
+		}
+		// number (and default)
+		return this.safeNum(value);
 	}
 
 	async runTick() {
@@ -1348,6 +1460,8 @@ class DataSolectrus extends utils.Adapter {
 		const items = Array.isArray(this.config.items) ? this.config.items : [];
 		const enabledItems = items.filter(it => it && typeof it === 'object' && it.enabled);
 		const retriesBeforeZero = this.getErrorRetriesBeforeZero();
+		const timeBudgetMs = this.getTickTimeBudgetMs();
+		let skippedItems = 0;
 
 		// If config changed (without restart), rebuild compiled cache + subscriptions.
 		try {
@@ -1355,13 +1469,23 @@ class DataSolectrus extends utils.Adapter {
 		} catch (e) {
 			const msg = e && e.message ? e.message : String(e);
 			this.log.warn(`Prepare items failed: ${msg}`);
-			await this.setStateAsync('info.lastError', msg, true);
+			try {
+				await this.setStateAsync('info.lastError', msg, true);
+			} catch {
+				// ignore
+			}
 		}
 
 		// Keep status in sync even if config changes without a restart
-		await this.setStateAsync('info.itemsConfigured', items.filter(it => it && typeof it === 'object').length, true);
-		await this.setStateAsync('info.itemsEnabled', enabledItems.length, true);
-		await this.setStateAsync('info.status', enabledItems.length ? 'ok' : 'no_items_enabled', true);
+		try {
+			await this.setStateAsync('info.itemsConfigured', items.filter(it => it && typeof it === 'object').length, true);
+			await this.setStateAsync('info.itemsEnabled', enabledItems.length, true);
+			await this.setStateAsync('info.status', enabledItems.length ? 'ok' : 'no_items_enabled', true);
+			await this.setStateAsync('info.timeBudgetMs', timeBudgetMs, true);
+			await this.setStateAsync('info.skippedItems', 0, true);
+		} catch {
+			// ignore
+		}
 
 		let snapshot = null;
 		try {
@@ -1369,12 +1493,25 @@ class DataSolectrus extends utils.Adapter {
 		} catch (e) {
 			const msg = e && e.message ? e.message : String(e);
 			this.log.warn(`Snapshot build failed: ${msg}`);
-			await this.setStateAsync('info.lastError', msg, true);
+			try {
+				await this.setStateAsync('info.lastError', msg, true);
+			} catch {
+				// ignore
+			}
 			snapshot = new Map();
 		}
 		this.currentSnapshot = snapshot;
 
-		for (const item of enabledItems) {
+		for (let idx = 0; idx < enabledItems.length; idx++) {
+			const item = enabledItems[idx];
+			if (timeBudgetMs > 0 && (Date.now() - start) > timeBudgetMs) {
+				skippedItems = enabledItems.length - idx;
+				this.warnOnce(
+					`tick_budget_exceeded|${Math.floor(Date.now() / 60000)}`,
+					`Tick time budget exceeded (${timeBudgetMs}ms). Skipping ${skippedItems} remaining item(s) this tick.`
+				);
+				break;
+			}
 			const targetId = this.getItemOutputId(item);
 			if (!targetId) {
 				continue;
@@ -1384,8 +1521,8 @@ class DataSolectrus extends utils.Adapter {
 
 			try {
 				const raw = await this.computeItemValue(item, snapshot);
-				const valueNum = this.applyResultRules(item, raw);
-				const value = this.castValueForItemType(item, valueNum);
+				const shaped = this.isNumericOutputItem(item) ? this.applyResultRules(item, raw) : raw;
+				const value = this.castValueForItemType(item, shaped);
 				await this.setStateAsync(targetId, value, true);
 				this.lastGoodValue.set(targetId, value);
 				this.lastGoodTs.set(targetId, Date.now());
@@ -1404,7 +1541,11 @@ class DataSolectrus extends utils.Adapter {
 				const errMsg = e && e.message ? e.message : String(e);
 				const msg = `${name}: ${errMsg}`;
 				this.warnOnce(`compute_failed|${targetId}`, `Compute failed (will retry/keep last): ${msg}`);
-				await this.setStateAsync('info.lastError', msg, true);
+				try {
+					await this.setStateAsync('info.lastError', msg, true);
+				} catch {
+					// ignore
+				}
 
 				const prev = this.consecutiveErrorCounts.get(targetId) || 0;
 				const next = prev + 1;
@@ -1426,8 +1567,7 @@ class DataSolectrus extends utils.Adapter {
 					}
 				} else if (next > retriesBeforeZero) {
 					try {
-						const zero = this.castValueForItemType(item, 0);
-						await this.setStateAsync(targetId, zero, true);
+						await this.setStateAsync(targetId, this.getZeroValueForItem(item), true);
 					} catch {
 						// ignore write errors
 					}
@@ -1437,8 +1577,13 @@ class DataSolectrus extends utils.Adapter {
 
 		this.currentSnapshot = null;
 
-		await this.setStateAsync('info.lastRun', new Date().toISOString(), true);
-		await this.setStateAsync('info.evalTimeMs', Date.now() - start, true);
+		try {
+			await this.setStateAsync('info.skippedItems', skippedItems, true);
+			await this.setStateAsync('info.lastRun', new Date().toISOString(), true);
+			await this.setStateAsync('info.evalTimeMs', Date.now() - start, true);
+		} catch {
+			// ignore
+		}
 	}
 
 	onUnload(callback) {
