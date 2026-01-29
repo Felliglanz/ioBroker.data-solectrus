@@ -410,6 +410,7 @@
 			const formulaEditorRef = React.useRef(null);
             const [formulaLiveValues, setFormulaLiveValues] = React.useState({});
             const [formulaLiveTs, setFormulaLiveTs] = React.useState({});
+            const [formulaLivePollNonce, setFormulaLivePollNonce] = React.useState(0);
             const [formulaLiveLoading, setFormulaLiveLoading] = React.useState(false);
             const [formulaPreview, setFormulaPreview] = React.useState(null);
             const [formulaPreviewLoading, setFormulaPreviewLoading] = React.useState(false);
@@ -552,10 +553,22 @@
             };
 
             const selectedItem = items[selectedIndex] || null;
-            const formulaLiveSignature = (() => {
+            const formulaInputSignature = (() => {
                 if (!formulaBuilderOpen || !selectedItem) return '';
                 const inputs = Array.isArray(selectedItem.inputs) ? selectedItem.inputs : [];
-                return inputs.map(inp => (inp && inp.sourceState ? String(inp.sourceState) : '')).join('|');
+                return inputs.map(inp => (inp && inp.sourceState ? String(inp.sourceState) : '')).filter(Boolean).join('|');
+            })();
+
+            const formulaLiveSignature = (() => {
+                if (!formulaBuilderOpen || !selectedItem) return '';
+                const ids = formulaInputSignature ? String(formulaInputSignature).split('|').filter(Boolean) : [];
+                const parts = ids.map(id => {
+                    const ts = formulaLiveTs && Object.prototype.hasOwnProperty.call(formulaLiveTs, id) ? formulaLiveTs[id] : undefined;
+                    const val = formulaLiveValues && Object.prototype.hasOwnProperty.call(formulaLiveValues, id) ? formulaLiveValues[id] : undefined;
+                    return `${id}:${ts === undefined ? '' : String(ts)}:${stringifyCompact(val, 30)}`;
+                });
+                parts.push(`_poll:${String(formulaLivePollNonce || 0)}`);
+                return parts.join('|');
             })();
 
             const stringifyCompact = (value, maxLen = 70) => {
@@ -977,6 +990,7 @@
                 if (!uniqueIds.length) {
                     setFormulaLiveValues({});
                     setFormulaLiveTs({});
+                    setFormulaLivePollNonce(n => n + 1);
                     return;
                 }
 
@@ -1000,6 +1014,7 @@
                     }
                     setFormulaLiveValues(nextVals);
                     setFormulaLiveTs(nextTs);
+                    setFormulaLivePollNonce(n => n + 1);
                     if (reason && props && props.onDebug) {
                         try {
                             props.onDebug('formulaLiveValues', { reason, count: uniqueIds.length });
@@ -1014,6 +1029,7 @@
 
             const refreshFormulaPreview = async opts => {
                 const reason = opts && opts.reason ? String(opts.reason) : '';
+                const showLoading = !!(opts && opts.showLoading);
                 if (!formulaBuilderOpen) return;
                 if (!selectedItem) return;
 
@@ -1029,7 +1045,9 @@
                     vars[key] = val;
                 }
 
-                setFormulaPreviewLoading(true);
+                if (showLoading) {
+                    setFormulaPreviewLoading(true);
+                }
                 try {
                     const val = evalPreviewExpression(String(formulaDraft || ''), vars);
                     setFormulaPreview({ ok: true, value: val });
@@ -1044,7 +1062,9 @@
                     const err = e && e.message ? String(e.message) : String(e);
                     setFormulaPreview({ ok: false, error: err });
                 } finally {
-                    setFormulaPreviewLoading(false);
+                    if (showLoading) {
+                        setFormulaPreviewLoading(false);
+                    }
                 }
             };
 
@@ -1098,7 +1118,7 @@
                         }
                     }
                 };
-            }, [formulaBuilderOpen, selectedIndex, formulaLiveSignature]);
+            }, [formulaBuilderOpen, selectedIndex, formulaInputSignature]);
 
             const insertIntoFormulaDraft = opts => {
                 const text = opts && opts.text !== undefined ? String(opts.text) : '';
@@ -1810,8 +1830,8 @@
                                             {
                                                 type: 'button',
                                                 style: Object.assign({}, btnStyle, { padding: '5px 9px', fontSize: 12 }),
-                                                disabled: formulaPreviewLoading || !(socket && typeof socket.sendTo === 'function'),
-                                                onClick: () => refreshFormulaPreview({ reason: 'manual' }),
+											disabled: formulaPreviewLoading,
+											onClick: () => refreshFormulaPreview({ reason: 'manual', showLoading: true }),
                                                 title: t('Refresh preview'),
                                             },
                                             formulaPreviewLoading ? t('Loading…') : t('Refresh')
