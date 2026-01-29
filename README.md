@@ -1,5 +1,7 @@
 # ioBroker.Data-SOLECTRUS
 
+![GitHub Release](https://img.shields.io/github/v/release/Felliglanz/data-solectrus?sort=semver)
+
 <img src="admin/data-solectrus.png" alt="SOLECTRUS" width="120" />
 
 ioBroker-Adapter, der eigene States unter `data-solectrus.0.*` anlegt und im festen Intervall (Standard: 5s, **wall-clock aligned**) mit berechneten Werten befüllt.
@@ -78,8 +80,8 @@ Beispiel:
 
 ### Erlaubte Operatoren
 
-- Arithmetik: `+ - * / % **`
-- Vergleiche: `< <= > >= == != === !==`
+- Arithmetik: `+ - * / %`
+- Vergleiche: `< <= > >= === !==`
 - Logik: `&& || !`
 - Ternary: `bedingung ? a : b`
 
@@ -87,6 +89,7 @@ Beispiel:
 
 - `min(a, b, ...)`
 - `max(a, b, ...)`
+- `pow(a, b)`
 - `abs(x)`
 - `round(x)`
 - `floor(x)`

@@ -3,13 +3,6 @@
 const utils = require('@iobroker/adapter-core');
 const jsep = require('jsep');
 
-// Add exponent operator support if needed (optional).
-try {
-	jsep.addBinaryOp('**', 11);
-} catch {
-	// ignore if already added
-}
-
 class DataSolectrus extends utils.Adapter {
 	constructor(options) {
 		super({
@@ -23,10 +16,12 @@ class DataSolectrus extends utils.Adapter {
 		this.tickTimer = null;
 		this.isUnloading = false;
 		this.jsonPathWarned = new Set();
+		this.debugOnceKeys = new Set();
 
 		this.formulaFunctions = {
 			min: Math.min,
 			max: Math.max,
+			pow: Math.pow,
 			abs: Math.abs,
 			round: Math.round,
 			floor: Math.floor,
@@ -62,9 +57,18 @@ class DataSolectrus extends utils.Adapter {
 
 	warnOnce(key, msg) {
 		const k = String(key);
+		if (this.jsonPathWarned.size > 500) this.jsonPathWarned.clear();
 		if (this.jsonPathWarned.has(k)) return;
 		this.jsonPathWarned.add(k);
 		this.log.warn(msg);
+	}
+
+	debugOnce(key, msg) {
+		const k = String(key);
+		if (this.debugOnceKeys.size > 500) this.debugOnceKeys.clear();
+		if (this.debugOnceKeys.has(k)) return;
+		this.debugOnceKeys.add(k);
+		this.log.debug(msg);
 	}
 
 	/**
@@ -166,6 +170,10 @@ class DataSolectrus extends utils.Adapter {
 		// Be forgiving: if the value is already numeric-ish, just use it.
 		// This allows mixed setups where a state sometimes is numeric and sometimes JSON-string.
 		if (typeof rawValue === 'number' || typeof rawValue === 'boolean') {
+			this.debugOnce(
+				`jsonpath_skipped_numeric|${warnKeyPrefix || ''}`,
+				`JSONPath '${jp}' skipped because source value is already ${typeof rawValue} (${warnKeyPrefix || 'no-prefix'})`
+			);
 			return this.safeNum(rawValue);
 		}
 
@@ -242,16 +250,10 @@ class DataSolectrus extends utils.Adapter {
 							return Number(left) / Number(right);
 						case '%':
 							return Number(left) % Number(right);
-						case '**':
-							return Number(left) ** Number(right);
 						case '&&':
 							return left && right;
 						case '||':
 							return left || right;
-						case '==':
-							return left == right;
-						case '!=':
-							return left != right;
 						case '===':
 							return left === right;
 						case '!==':
@@ -702,12 +704,20 @@ class DataSolectrus extends utils.Adapter {
 
 		const inputs = Array.isArray(item.inputs) ? item.inputs : [];
 		/** @type {Record<string, number>} */
-		const vars = {};
+		const vars = Object.create(null);
 
 		for (const inp of inputs) {
 			if (!inp || typeof inp !== 'object') continue;
 			const keyRaw = inp.key ? String(inp.key).trim() : '';
 			const key = keyRaw.replace(/[^a-zA-Z0-9_]/g, '_');
+			if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
+				const itemId = this.getItemDisplayId(item) || (item && item.name ? String(item.name) : '');
+				this.debugOnce(
+					`blocked_input_key|${itemId}|${key}`,
+					`Blocked dangerous input key '${keyRaw}' (sanitized to '${key}') for item '${itemId}'`
+				);
+				continue;
+			}
 			if (!key) continue;
 			const id = inp.sourceState ? String(inp.sourceState) : '';
 			const raw = snapshot ? snapshot.get(id) : this.cache.get(id);
