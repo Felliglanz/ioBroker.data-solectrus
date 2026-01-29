@@ -16,6 +16,7 @@
     "platform": "Javascript/Node.js",
     "mode": "daemon",
     "compact": true,
+    "messagebox": true,
     "enabled": true,
     "adminUI": {
       "config": "json"
