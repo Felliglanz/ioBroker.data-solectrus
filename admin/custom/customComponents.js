@@ -411,6 +411,8 @@
             const [formulaLiveValues, setFormulaLiveValues] = React.useState({});
             const [formulaLiveTs, setFormulaLiveTs] = React.useState({});
             const [formulaLiveLoading, setFormulaLiveLoading] = React.useState(false);
+            const [formulaPreview, setFormulaPreview] = React.useState(null);
+            const [formulaPreviewLoading, setFormulaPreviewLoading] = React.useState(false);
 
             React.useEffect(() => {
                 const onDocMouseDown = e => {
@@ -576,6 +578,14 @@
                 return str.slice(0, Math.max(0, maxLen - 1)) + '…';
             };
 
+            const getAdapterInstanceId = () => {
+                const adapterName = (props && (props.adapterName || props.adapter)) || 'data-solectrus';
+                const instanceId = props && typeof props.instanceId === 'string' ? props.instanceId : '';
+                if (instanceId && instanceId.includes('.')) return instanceId;
+                const inst = props && Number.isFinite(props.instance) ? props.instance : 0;
+                return `${adapterName}.${inst}`;
+            };
+
             const sanitizeInputKey = raw => {
                 const keyRaw = raw ? String(raw).trim() : '';
                 const key = keyRaw.replace(/[^a-zA-Z0-9_]/g, '_');
@@ -647,6 +657,92 @@
                     setFormulaLiveLoading(false);
                 }
             };
+
+            const refreshFormulaPreview = async opts => {
+                const reason = opts && opts.reason ? String(opts.reason) : '';
+                if (!formulaBuilderOpen) return;
+                if (!selectedItem) return;
+                if (!socket || typeof socket.sendTo !== 'function') {
+                    setFormulaPreview({ ok: false, error: t('Preview not available') });
+                    return;
+                }
+
+                const inputs = Array.isArray(selectedItem.inputs) ? selectedItem.inputs : [];
+                const vars = Object.create(null);
+                for (const inp of inputs) {
+                    const key = sanitizeInputKey(inp && inp.key ? inp.key : '');
+                    if (!key) continue;
+                    const id = inp && inp.sourceState ? String(inp.sourceState) : '';
+                    if (!id) continue;
+                    const val = formulaLiveValues[id];
+                    if (val === undefined) continue;
+                    vars[key] = val;
+                }
+
+                setFormulaPreviewLoading(true);
+                try {
+                    const target = getAdapterInstanceId();
+                    const payload = { expr: String(formulaDraft || ''), vars };
+                    const res = await new Promise(resolve => {
+                        let done = false;
+                        const timeout = setTimeout(() => {
+                            if (done) return;
+                            done = true;
+                            resolve({ ok: false, error: t('Preview timeout') });
+                        }, 1500);
+                        try {
+                            socket.sendTo(target, 'evalFormulaPreview', payload, reply => {
+                                if (done) return;
+                                done = true;
+                                try {
+                                    clearTimeout(timeout);
+                                } catch {
+                                    // ignore
+                                }
+                                resolve(reply && typeof reply === 'object' ? reply : { ok: false, error: t('Preview not available') });
+                            });
+                        } catch {
+                            try {
+                                clearTimeout(timeout);
+                            } catch {
+                                // ignore
+                            }
+                            resolve({ ok: false, error: t('Preview not available') });
+                        }
+                    });
+                    setFormulaPreview(res);
+                    if (reason && props && props.onDebug) {
+                        try {
+                            props.onDebug('formulaPreview', { reason, ok: !!res.ok });
+                        } catch {
+                            // ignore
+                        }
+                    }
+                } finally {
+                    setFormulaPreviewLoading(false);
+                }
+            };
+
+            React.useEffect(() => {
+                if (!formulaBuilderOpen) return;
+                let timer = null;
+                try {
+                    timer = setTimeout(() => {
+                        refreshFormulaPreview({ reason: 'debounced' });
+                    }, 250);
+                } catch {
+                    // ignore
+                }
+                return () => {
+                    if (timer) {
+                        try {
+                            clearTimeout(timer);
+                        } catch {
+                            // ignore
+                        }
+                    }
+                };
+            }, [formulaBuilderOpen, formulaDraft, formulaLiveSignature]);
 
             React.useEffect(() => {
                 if (!formulaBuilderOpen) return;
@@ -1116,6 +1212,18 @@
                     maxWidth: '100%',
                 };
 
+                const previewOkPillStyle = Object.assign({}, valuePillStyle, {
+                    color: colors.text,
+                    background: isDark ? 'rgba(46, 204, 113, 0.12)' : 'rgba(46, 204, 113, 0.10)',
+                    border: `1px solid ${isDark ? 'rgba(46, 204, 113, 0.35)' : 'rgba(46, 204, 113, 0.25)'}`,
+                });
+
+                const previewErrPillStyle = Object.assign({}, valuePillStyle, {
+                    color: colors.text,
+                    background: isDark ? 'rgba(231, 76, 60, 0.12)' : 'rgba(231, 76, 60, 0.10)',
+                    border: `1px solid ${isDark ? 'rgba(231, 76, 60, 0.35)' : 'rgba(231, 76, 60, 0.25)'}`,
+                });
+
                 const vars = Array.isArray(selectedItem.inputs)
                     ? selectedItem.inputs
                         .map(inp => {
@@ -1206,6 +1314,44 @@
                                                 ? React.createElement(
                                                     'span',
                                                     {
+                                                React.createElement(
+                                                    'div',
+                                                    { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 } },
+                                                    React.createElement('label', { style: Object.assign({}, labelStyle, { marginTop: 0 }) }, t('Formula expression')),
+                                                    React.createElement(
+                                                        'div',
+                                                        { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                                                        React.createElement(
+                                                            'span',
+                                                            { style: { fontSize: 12, color: colors.textMuted } },
+                                                            t('Result')
+                                                        ),
+                                                        React.createElement(
+                                                            'button',
+                                                            {
+                                                                type: 'button',
+                                                                style: Object.assign({}, btnStyle, { padding: '5px 9px', fontSize: 12 }),
+                                                                disabled: formulaPreviewLoading || !(socket && typeof socket.sendTo === 'function'),
+                                                                onClick: () => refreshFormulaPreview({ reason: 'manual' }),
+                                                                title: t('Refresh preview'),
+                                                            },
+                                                            formulaPreviewLoading ? t('Loading…') : t('Refresh')
+                                                        ),
+                                                        formulaPreview && formulaPreview.ok
+                                                            ? React.createElement(
+                                                                'span',
+                                                                { style: previewOkPillStyle, title: stringifyCompact(formulaPreview.value, 200) },
+                                                                stringifyCompact(formulaPreview.value)
+                                                            )
+                                                            : formulaPreview && !formulaPreview.ok
+                                                                ? React.createElement(
+                                                                    'span',
+                                                                    { style: previewErrPillStyle, title: formulaPreview.error ? String(formulaPreview.error) : '' },
+                                                                    formulaPreview.error ? stringifyCompact(formulaPreview.error) : t('n/a')
+                                                                )
+                                                                : React.createElement('span', { style: valuePillStyle }, t('n/a'))
+                                                    )
+                                                ),
                                                         style: valuePillStyle,
                                                     title: liveTs ? `${liveText} @ ${new Date(liveTs).toLocaleString()}` : liveText,
                                                 },
