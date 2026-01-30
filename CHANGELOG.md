@@ -11,6 +11,7 @@
 ### Fixed
 
 - Admin UI: Builder crash on open (runtime error in custom UI script).
+- Admin UI: Formula Builder live values now respect JSONPath and input clamping (neg→0) in the preview.
 
 ## 0.2.5 - 2026-01-29
 

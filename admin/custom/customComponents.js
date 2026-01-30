@@ -130,6 +130,187 @@
         return str.slice(0, Math.max(0, maxLen - 1)) + '…';
     }
 
+    function safeNumForPreview(v) {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    // Keep in sync with adapter-side minimal JSONPath subset.
+    // Supported examples:
+    // - $.apower
+    // - $.aenergy.by_minute[2]
+    // - $['temperature']['tC']
+    function applyJsonPathForPreview(obj, path) {
+        if (!path) return undefined;
+        let p = String(path).trim();
+        if (!p) return undefined;
+
+        // Accept both "$.x" and ".x" as a convenience.
+        if (p.startsWith('.')) {
+            p = `$${p}`;
+        }
+        if (!p.startsWith('$')) {
+            return undefined;
+        }
+
+        let cur = obj;
+        let i = 1; // skip '$'
+        const len = p.length;
+        const isDangerousKey = k => k === '__proto__' || k === 'prototype' || k === 'constructor';
+        while (i < len) {
+            const ch = p[i];
+            if (ch === '.') {
+                i++;
+                const start = i;
+                while (i < len && /[A-Za-z0-9_]/.test(p[i])) i++;
+                const key = p.slice(start, i);
+                if (!key) return undefined;
+                if (isDangerousKey(key)) return undefined;
+                if (cur === null || cur === undefined) return undefined;
+                cur = cur[key];
+                continue;
+            }
+            if (ch === '[') {
+                i++;
+                while (i < len && /\s/.test(p[i])) i++;
+                if (i >= len) return undefined;
+                const quote = p[i] === '"' || p[i] === "'" ? p[i] : null;
+                if (quote) {
+                    i++;
+                    let str = '';
+                    while (i < len) {
+                        const c = p[i];
+                        if (c === '\\') {
+                            if (i + 1 < len) {
+                                str += p[i + 1];
+                                i += 2;
+                                continue;
+                            }
+                            return undefined;
+                        }
+                        if (c === quote) {
+                            i++;
+                            break;
+                        }
+                        str += c;
+                        i++;
+                    }
+                    while (i < len && /\s/.test(p[i])) i++;
+                    if (p[i] !== ']') return undefined;
+                    i++;
+                    if (isDangerousKey(str)) return undefined;
+                    if (cur === null || cur === undefined) return undefined;
+                    cur = cur[str];
+                    continue;
+                }
+
+                // array index
+                const start = i;
+                while (i < len && /[0-9]/.test(p[i])) i++;
+                const numStr = p.slice(start, i);
+                while (i < len && /\s/.test(p[i])) i++;
+                if (p[i] !== ']') return undefined;
+                i++;
+                const idx = Number(numStr);
+                if (!Number.isInteger(idx)) return undefined;
+                if (!Array.isArray(cur)) return undefined;
+                cur = cur[idx];
+                continue;
+            }
+
+            // Unknown token
+            return undefined;
+        }
+        return cur;
+    }
+
+    function getValueFromJsonPathForPreview(rawValue, jsonPath) {
+        const jp = jsonPath !== undefined && jsonPath !== null ? String(jsonPath).trim() : '';
+        if (!jp) {
+            return rawValue;
+        }
+
+        let obj = null;
+        if (rawValue && typeof rawValue === 'object') {
+            obj = rawValue;
+        } else if (typeof rawValue === 'string') {
+            const s = rawValue.trim();
+            if (!s) {
+                return undefined;
+            }
+            try {
+                obj = JSON.parse(s);
+            } catch {
+                return undefined;
+            }
+        } else {
+            return undefined;
+        }
+
+        const extracted = applyJsonPathForPreview(obj, jp);
+        if (extracted === undefined) {
+            return undefined;
+        }
+        if (extracted === null) return null;
+        const t = typeof extracted;
+        if (t === 'string' || t === 'number' || t === 'boolean') return extracted;
+        if (extracted instanceof Date && typeof extracted.toISOString === 'function') return extracted.toISOString();
+        // Keep formulas deterministic: do not expose objects/arrays.
+        return undefined;
+    }
+
+    function computePreviewInputValue(item, inp, rawValue) {
+        const hasJsonPath = inp && inp.jsonPath !== undefined && inp.jsonPath !== null && String(inp.jsonPath).trim() !== '';
+        let value;
+        if (hasJsonPath) {
+            const extracted = getValueFromJsonPathForPreview(rawValue, inp && inp.jsonPath);
+            if (typeof extracted === 'string') {
+                const n = Number(extracted);
+                value = Number.isFinite(n) ? n : extracted;
+            } else {
+                value = extracted;
+            }
+        } else {
+            value = safeNumForPreview(rawValue);
+        }
+
+        // Clamp negative inputs BEFORE formula evaluation (only if numeric).
+        if (typeof value === 'number' && ((item && item.noNegative) || (inp && inp.noNegative)) && value < 0) {
+            value = 0;
+        }
+
+        return value;
+    }
+
+    function isNumericOutputItemForPreview(item) {
+        const t = item && item.type ? String(item.type) : '';
+        return t === '' || t === 'number';
+    }
+
+    function applyResultRulesForPreview(item, value) {
+        let v = safeNumForPreview(value);
+
+        const toOptionalNumber = val => {
+            if (val === undefined || val === null) return NaN;
+            if (typeof val === 'string' && val.trim() === '') return NaN;
+            const n = Number(val);
+            return Number.isFinite(n) ? n : NaN;
+        };
+
+        if (item && item.noNegative && v < 0) {
+            v = 0;
+        }
+
+        if (item && item.clamp) {
+            const min = toOptionalNumber(item.min);
+            const max = toOptionalNumber(item.max);
+            if (Number.isFinite(min) && v < min) v = min;
+            if (Number.isFinite(max) && v > max) v = max;
+        }
+
+        return v;
+    }
+
     function sanitizeInputKey(raw) {
         const keyRaw = raw ? String(raw).trim() : '';
         const key = keyRaw.replace(/[^a-zA-Z0-9_]/g, '_');
@@ -1046,10 +1227,8 @@
                     const key = sanitizeInputKey(inp && inp.key ? inp.key : '');
                     if (!key) continue;
                     const id = inp && inp.sourceState ? String(inp.sourceState) : '';
-                    if (!id) continue;
-                    const val = formulaLiveValues[id];
-                    if (val === undefined) continue;
-                    vars[key] = val;
+                    const raw = id ? formulaLiveValues[id] : undefined;
+                    vars[key] = computePreviewInputValue(selectedItem, inp, raw);
                 }
 
                 if (showLoading) {
@@ -1057,7 +1236,10 @@
                 }
                 try {
                     const val = evalPreviewExpression(String(formulaDraft || ''), vars, t);
-                    setFormulaPreview({ ok: true, value: val });
+                    const previewValue = isNumericOutputItemForPreview(selectedItem)
+                        ? applyResultRulesForPreview(selectedItem, val)
+                        : val;
+                    setFormulaPreview({ ok: true, value: previewValue });
                     if (reason && props && props.onDebug) {
                         try {
                             props.onDebug('formulaPreview', { reason, ok: true });
@@ -1581,7 +1763,13 @@
                         .map(inp => {
                             const rawKey = inp && inp.key ? String(inp.key) : '';
                             const key = sanitizeInputKey(rawKey);
-                            return { rawKey, key, sourceState: inp && inp.sourceState ? String(inp.sourceState) : '' };
+                            return {
+                                rawKey,
+                                key,
+                                sourceState: inp && inp.sourceState ? String(inp.sourceState) : '',
+                                jsonPath: inp && inp.jsonPath ? String(inp.jsonPath) : '',
+                                noNegative: !!(inp && inp.noNegative),
+                            };
                         })
                         .filter(v => !!v.key)
                     : [];
@@ -1644,7 +1832,8 @@
                                     ? vars.map((v, idx) => {
                                           const title = v.sourceState ? `${v.rawKey} ← ${v.sourceState}` : v.rawKey;
                                           const liveId = v.sourceState;
-                                          const liveVal = liveId ? formulaLiveValues[liveId] : undefined;
+                                          const rawLiveVal = liveId ? formulaLiveValues[liveId] : undefined;
+                                          const liveVal = liveId ? computePreviewInputValue(selectedItem, v, rawLiveVal) : undefined;
                                           const liveTs = liveId ? formulaLiveTs[liveId] : undefined;
                                           const liveText = liveId
                                               ? liveVal === undefined
