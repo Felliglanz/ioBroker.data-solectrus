@@ -1,6 +1,6 @@
-# Formula Builder
+# Formel-Builder
 
-Der **Formula Builder** ist ein komfortabler Editor im Admin-UI des Adapters **data-solectrus**, mit dem du Formeln schneller und fehlerärmer zusammenbauen kannst.
+Der **Formel-Builder** ist ein komfortabler Editor im Admin-UI des Adapters **data-solectrus**, mit dem du Formeln schneller und fehlerärmer zusammenbauen kannst.
 
 Er ist besonders hilfreich, wenn du viele Inputs hast (z. B. mehrere PV-Quellen) oder häufig Operatoren/Funktionen nutzt.
 
@@ -95,4 +95,3 @@ Der Builder ist Teil der `customComponents.js`, die im Browser gecacht werden ka
 
 - Prüfe, ob die Inputs wirklich Werte liefern (links bei Live values).
 - Prüfe, ob deine Variablen-Keys gültige Namen sind (z. B. keine Sonderzeichen; diese werden für die Vorschau normalisiert).
-
