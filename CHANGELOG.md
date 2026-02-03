@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.8 - 2026-02-03
+
+### Changed
+
+- Repository renamed from `data-solectrus` to `ioBroker.data-solectrus` for ioBroker naming convention compliance.
+- Updated all GitHub URLs in documentation and configuration files.
+
 ## 0.2.7 - 2026-01-30
 
 ### Added
