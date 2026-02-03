@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.9 - 2026-02-03
+
+### Added
+
+- Package metadata: repository, bugs, homepage URLs in package.json
+- .npmignore file for cleaner npm packages
+- News section in io-package.json for ioBroker Admin UI
+- README link in io-package.json
+
 ## 0.2.8 - 2026-02-03
 
 ### Changed
