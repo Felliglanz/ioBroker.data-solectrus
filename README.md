@@ -33,8 +33,9 @@ Der Adapter ist absichtlich „leer“ – du legst nur die Items an, die du bra
 
 1) **Items anlegen** (Admin → Adapter → data-solectrus → Werte)
 - `mode=source`: genau einen State spiegeln
-- `mode=formula`: mehrere Inputs + eine Formel
-
+- `mode=formula`: mehrere Inputs + eine Formel- Items werden im Editor automatisch nach ihrem **Ordner/Gruppe**-Feld gruppiert
+- Ordner zeigen auf einen Blick aktive (🟢) und inaktive (⚪) Datenpunkte
+- Ordner können auf-/zugeklappt werden für bessere Übersicht
 2) Optional: **Snapshot aktivieren** (Global settings)
 - Wenn deine Quellen zeitversetzt updaten und du „kurz unplausible“ Kombinationen siehst, aktiviere Snapshot.
 
@@ -185,6 +186,6 @@ Zusätzlich:
 - `npm run lint` (Syntax-Check)
 - `npm run check:simulate` (kurzer 30s/6-Ticks Regression-Check für PV+signed Meter)
 - Formel: `pv1 + pv2 + pv3`
-- `info.itemsEnabled`: Anzahl aktivierter Items
+- `info.itemsActive`: Anzahl aktivierter Items
 
 - `info.lastError`: letzter Fehlertext
