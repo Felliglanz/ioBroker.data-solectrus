@@ -186,6 +186,6 @@ Zusätzlich:
 - `npm run lint` (Syntax-Check)
 - `npm run check:simulate` (kurzer 30s/6-Ticks Regression-Check für PV+signed Meter)
 - Formel: `pv1 + pv2 + pv3`
-- `info.itemsEnabled`: Anzahl aktivierter Items
+- `info.itemsActive`: Anzahl aktivierter Items
 
 - `info.lastError`: letzter Fehlertext
