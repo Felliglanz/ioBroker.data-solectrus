@@ -2251,6 +2251,7 @@
                                                   ? React.createElement(
                                                         'span',
                                                         {
+                                                            title: `${activeCount} ${activeCount === 1 ? t('active item') : t('active items')}`,
                                                             style: {
                                                                 background: '#10b981',
                                                                 color: 'white',
@@ -2271,6 +2272,7 @@
                                                   ? React.createElement(
                                                         'span',
                                                         {
+                                                            title: `${inactiveCount} ${inactiveCount === 1 ? t('inactive item') : t('inactive items')}`,
                                                             style: {
                                                                 background: isDark ? '#4b5563' : '#d1d5db',
                                                                 color: isDark ? '#d1d5db' : '#4b5563',
