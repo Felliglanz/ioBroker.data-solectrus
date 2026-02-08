@@ -2993,8 +2993,98 @@
                                             ),
                                             React.createElement(
                                                 'div',
-                                                { style: { fontSize: 11, color: colors.textMuted, marginTop: 4 } },
+                                                { style: { fontSize: 11, color: colors.textMuted, marginTop: 4, marginBottom: 8 } },
                                                 t('Rules are evaluated top-to-bottom; first matching rule wins.')
+                                            ),
+                                            React.createElement(
+                                                'div',
+                                                {
+                                                    style: {
+                                                        backgroundColor: colors.cardBg,
+                                                        border: `1px solid ${colors.divider}`,
+                                                        borderRadius: 4,
+                                                        padding: 10,
+                                                        marginTop: 4,
+                                                        marginBottom: 8,
+                                                    },
+                                                },
+                                                React.createElement(
+                                                    'div',
+                                                    { style: { fontSize: 11, fontWeight: 600, color: colors.textMuted, marginBottom: 8 } },
+                                                    t('Examples')
+                                                ),
+                                                React.createElement(
+                                                    'div',
+                                                    { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+                                                    React.createElement(
+                                                        'button',
+                                                        {
+                                                            type: 'button',
+                                                            style: Object.assign({}, btnStyle, { padding: '4px 8px', fontSize: 11 }),
+                                                            onClick: () => {
+                                                                const rules = Array.isArray(selectedItem.rules) ? [...selectedItem.rules] : [];
+                                                                const itemType = selectedItem.type || 'string';
+                                                                if (itemType === 'boolean') {
+                                                                    rules.push({ condition: 'battery > 80', value: true });
+                                                                    rules.push({ condition: 'true', value: false });
+                                                                } else {
+                                                                    rules.push({ condition: 'soc < 10', value: 'Battery-Empty' });
+                                                                    rules.push({ condition: 'soc < 30', value: 'Battery-Low' });
+                                                                    rules.push({ condition: 'soc >= 80', value: 'Battery-Full' });
+                                                                    rules.push({ condition: 'true', value: 'Battery-Normal' });
+                                                                }
+                                                                updateSelected('rules', rules);
+                                                            },
+                                                            title: itemType === 'boolean' ? 'Battery OK check' : 'Battery status levels',
+                                                        },
+                                                        itemType === 'boolean' ? '✓ Battery OK' : '🔋 Battery Levels'
+                                                    ),
+                                                    React.createElement(
+                                                        'button',
+                                                        {
+                                                            type: 'button',
+                                                            style: Object.assign({}, btnStyle, { padding: '4px 8px', fontSize: 11 }),
+                                                            onClick: () => {
+                                                                const rules = Array.isArray(selectedItem.rules) ? [...selectedItem.rules] : [];
+                                                                const itemType = selectedItem.type || 'string';
+                                                                if (itemType === 'boolean') {
+                                                                    rules.push({ condition: 'surplus > 0', value: true });
+                                                                    rules.push({ condition: 'true', value: false });
+                                                                } else {
+                                                                    rules.push({ condition: 'surplus > 1000', value: 'High-Surplus' });
+                                                                    rules.push({ condition: 'surplus > 0', value: 'Surplus' });
+                                                                    rules.push({ condition: 'true', value: 'No-Surplus' });
+                                                                }
+                                                                updateSelected('rules', rules);
+                                                            },
+                                                            title: itemType === 'boolean' ? 'Has surplus check' : 'Surplus categories',
+                                                        },
+                                                        itemType === 'boolean' ? '⚡ Has Surplus' : '⚡ Surplus Levels'
+                                                    ),
+                                                    React.createElement(
+                                                        'button',
+                                                        {
+                                                            type: 'button',
+                                                            style: Object.assign({}, btnStyle, { padding: '4px 8px', fontSize: 11 }),
+                                                            onClick: () => {
+                                                                const rules = Array.isArray(selectedItem.rules) ? [...selectedItem.rules] : [];
+                                                                const itemType = selectedItem.type || 'string';
+                                                                if (itemType === 'boolean') {
+                                                                    rules.push({ condition: 'hour >= 6 && hour < 20', value: true });
+                                                                    rules.push({ condition: 'true', value: false });
+                                                                } else {
+                                                                    rules.push({ condition: 'hour >= 6 && hour < 12', value: 'Morning' });
+                                                                    rules.push({ condition: 'hour >= 12 && hour < 18', value: 'Afternoon' });
+                                                                    rules.push({ condition: 'hour >= 18 && hour < 22', value: 'Evening' });
+                                                                    rules.push({ condition: 'true', value: 'Night' });
+                                                                }
+                                                                updateSelected('rules', rules);
+                                                            },
+                                                            title: itemType === 'boolean' ? 'Daytime check' : 'Time of day categories',
+                                                        },
+                                                        itemType === 'boolean' ? '🌞 Is Daytime' : '🕐 Time of Day'
+                                                    )
+                                                )
                                             ),
                                             (Array.isArray(selectedItem.rules) ? selectedItem.rules : []).map((rule, ruleIdx) =>
                                                 React.createElement(
@@ -3027,7 +3117,16 @@
                                                             t('Delete')
                                                         )
                                                     ),
-                                                    React.createElement('label', { style: Object.assign({}, labelStyle, { marginTop: 0 }) }, t('Condition')),
+                                                    React.createElement(
+                                                        'div',
+                                                        { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+                                                        React.createElement('label', { style: Object.assign({}, labelStyle, { marginTop: 0 }) }, t('Condition')),
+                                                        React.createElement(
+                                                            'div',
+                                                            { style: { fontSize: 10, color: colors.textMuted } },
+                                                            t('Use inputs and operators: <, >, ==, &&, ||')
+                                                        )
+                                                    ),
                                                     React.createElement('input', {
                                                         style: Object.assign({}, inputStyle, { fontFamily: 'monospace' }),
                                                         type: 'text',
@@ -3038,6 +3137,7 @@
                                                             updateSelected('rules', rules);
                                                         },
                                                         placeholder: t('e.g. soc < 10 or true for default'),
+                                                        title: t('Formula syntax: soc < 10, battery > 80 && surplus > 0, true (for default/fallback)'),
                                                     }),
                                                     React.createElement('label', { style: labelStyle }, t('Output Value')),
                                                     selectedItem.type === 'boolean'
@@ -3314,42 +3414,50 @@
                                           placeholder: 'W',
                                       })
                                   ),
-                                  React.createElement(
-                                      'div',
-                                      null,
-                                      React.createElement(
-                                          'label',
-                                          { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 } },
-                                          React.createElement('input', {
-                                              type: 'checkbox',
-                                              checked: !!selectedItem.clamp,
-                                              onChange: e => updateSelected('clamp', !!e.target.checked),
-                                          }),
-                                          React.createElement('span', null, t('Clamp result'))
-                                      )
-                                  )
+                                  selectedItem.mode !== 'state-machine'
+                                      ? React.createElement(
+                                            'div',
+                                            null,
+                                            React.createElement(
+                                                'label',
+                                                { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 } },
+                                                React.createElement('input', {
+                                                    type: 'checkbox',
+                                                    checked: !!selectedItem.clamp,
+                                                    onChange: e => updateSelected('clamp', !!e.target.checked),
+                                                }),
+                                                React.createElement('span', null, t('Clamp result'))
+                                            )
+                                        )
+                                      : null
                               ),
-                              React.createElement(
-                                  'label',
-                                  {
-                                      style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 },
-                                      title: t('Clamp negative to 0 (tooltip)')
-                                  },
-                                  React.createElement('input', {
-                                      type: 'checkbox',
-                                      checked: !!selectedItem.noNegative,
-                                      onChange: e => updateSelected('noNegative', !!e.target.checked),
-                                  }),
-                                  React.createElement('span', null, t('Clamp negative to 0'))
-                              ),
-                              React.createElement(
-                                  'div',
-                                  { style: { marginLeft: 26, marginTop: 4, fontSize: 12, color: colors.textMuted } },
-                                  t(selectedItem && selectedItem.mode === 'formula'
-                                      ? 'Clamp negative to 0 (hint formula)'
-                                      : 'Clamp negative to 0 (hint source)')
-                              ),
-                              selectedItem.clamp
+                              selectedItem.mode !== 'state-machine'
+                                  ? React.createElement(
+                                        React.Fragment,
+                                        null,
+                                        React.createElement(
+                                            'label',
+                                            {
+                                                style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 },
+                                                title: t('Clamp negative to 0 (tooltip)')
+                                            },
+                                            React.createElement('input', {
+                                                type: 'checkbox',
+                                                checked: !!selectedItem.noNegative,
+                                                onChange: e => updateSelected('noNegative', !!e.target.checked),
+                                            }),
+                                            React.createElement('span', null, t('Clamp negative to 0'))
+                                        ),
+                                        React.createElement(
+                                            'div',
+                                            { style: { marginLeft: 26, marginTop: 4, fontSize: 12, color: colors.textMuted } },
+                                            t(selectedItem && selectedItem.mode === 'formula'
+                                                ? 'Clamp negative to 0 (hint formula)'
+                                                : 'Clamp negative to 0 (hint source)')
+                                        )
+                                    )
+                                  : null,
+                              selectedItem.clamp && selectedItem.mode !== 'state-machine'
                                   ? React.createElement(
                                         'div',
                                         { style: rowStyle2 },

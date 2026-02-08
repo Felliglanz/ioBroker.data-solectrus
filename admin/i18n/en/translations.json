@@ -136,6 +136,8 @@
   "Condition": "Condition",
   "Output Value": "Output Value",
   "Rules are evaluated top-to-bottom; first matching rule wins.": "Rules are evaluated top-to-bottom; first matching rule wins.",
+  "Use inputs and operators: <, >, ==, &&, ||": "Use inputs and operators: <, >, ==, &&, ||",
+  "Formula syntax: soc < 10, battery > 80 && surplus > 0, true (for default/fallback)": "Formula syntax: soc < 10, battery > 80 && surplus > 0, true (for default/fallback)",
   "e.g. soc < 10 or true for default": "e.g. soc < 10 or true for default",
   "e.g. Battery-Empty": "e.g. Battery-Empty"
 }
