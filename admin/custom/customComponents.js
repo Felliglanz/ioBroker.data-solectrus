@@ -3035,9 +3035,9 @@
                                                                 }
                                                                 updateSelected('rules', rules);
                                                             },
-                                                            title: itemType === 'boolean' ? 'Battery OK check' : 'Battery status levels',
+                                                            title: (selectedItem.type || 'string') === 'boolean' ? 'Battery OK check' : 'Battery status levels',
                                                         },
-                                                        itemType === 'boolean' ? '✓ Battery OK' : '🔋 Battery Levels'
+                                                        (selectedItem.type || 'string') === 'boolean' ? '✓ Battery OK' : '🔋 Battery Levels'
                                                     ),
                                                     React.createElement(
                                                         'button',
@@ -3057,9 +3057,9 @@
                                                                 }
                                                                 updateSelected('rules', rules);
                                                             },
-                                                            title: itemType === 'boolean' ? 'Has surplus check' : 'Surplus categories',
+                                                            title: (selectedItem.type || 'string') === 'boolean' ? 'Has surplus check' : 'Surplus categories',
                                                         },
-                                                        itemType === 'boolean' ? '⚡ Has Surplus' : '⚡ Surplus Levels'
+                                                        (selectedItem.type || 'string') === 'boolean' ? '⚡ Has Surplus' : '⚡ Surplus Levels'
                                                     ),
                                                     React.createElement(
                                                         'button',
@@ -3080,9 +3080,9 @@
                                                                 }
                                                                 updateSelected('rules', rules);
                                                             },
-                                                            title: itemType === 'boolean' ? 'Daytime check' : 'Time of day categories',
+                                                            title: (selectedItem.type || 'string') === 'boolean' ? 'Daytime check' : 'Time of day categories',
                                                         },
-                                                        itemType === 'boolean' ? '🌞 Is Daytime' : '🕐 Time of Day'
+                                                        (selectedItem.type || 'string') === 'boolean' ? '🌞 Is Daytime' : '🕐 Time of Day'
                                                     )
                                                 )
                                             ),
