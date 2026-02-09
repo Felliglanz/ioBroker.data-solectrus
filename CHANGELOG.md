@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.4 - 2026-02-09
+
+### Fixed
+
+- **State Machine: String value handling** - String inputs are now properly preserved in state-machine rules
+  - Non-numeric strings (e.g., "Idle", "Charging", "Discharging") are kept as strings instead of being converted to numbers
+  - Numeric strings (e.g., "123") are still converted to numbers as before
+  - Fixes string comparisons in rule conditions (e.g., `status == 'Idle'` now works correctly)
+  - Allows mapping system status codes to human-readable text
+
 ## 0.3.3 - 2026-02-08
 
 ### Added
