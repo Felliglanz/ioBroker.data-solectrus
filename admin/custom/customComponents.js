@@ -1070,15 +1070,6 @@
                 }
 
                 const onChange = props.onChange;
-                const cb = () => {
-                    try {
-                        if (props && typeof props.forceUpdate === 'function') {
-                            props.forceUpdate([attr], props.data);
-                        }
-                    } catch {
-                        // ignore
-                    }
-                };
 
                 const safeItems = normalizeItems(nextItems).map(it => ensureTitle(it, t));
 
@@ -1104,7 +1095,14 @@
                 if (dataIsObject) {
                     const nextData = setByPath(props.data, attr, safeItems);
                     onChange(nextData);
-                    cb();
+                    try {
+                        if (props && typeof props.forceUpdate === 'function') {
+                            // IMPORTANT: pass the updated data object to avoid forcing a re-render with stale props.data
+                            props.forceUpdate([attr], nextData);
+                        }
+                    } catch {
+                        // ignore
+                    }
                     return;
                 }
 
