@@ -9,7 +9,7 @@
     'use strict';
 
     const REMOTE_NAME = 'DataSolectrusItems';
-    const UI_VERSION = '2026-02-10 draft-blur-14a3387';
+    const UI_VERSION = '2026-02-10 v0.3.6 (cursor-fix)';
     const DEBUG = false;
     let shareScope;
 

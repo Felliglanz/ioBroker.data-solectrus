@@ -1,13 +1,13 @@
 # Changelog
 
-## 0.3.5 - 2026-02-10 (in development)
+## 0.3.6 - 2026-02-10
 
 ### Fixed
 
 - **Custom UI: Cursor position in text input fields** - Fixed cursor jumping to end while typing
-  - Optimized `updateSelected()` to only recalculate title when necessary (enabled, name, group, targetId fields)
-  - Reduces unnecessary component re-renders for formula, sourceState, and other fields
-  - Minimal fix without changing input control patterns
+  - Buffer edits in a draft item while typing
+  - Persist changes to ioBroker Admin only on `blur` (commit-on-blur)
+  - Prevents Admin-driven remount/re-render churn from disrupting the caret
 
 ## 0.3.4 - 2026-02-09
 
