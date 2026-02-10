@@ -1,7 +1,7 @@
 {
   "common": {
     "name": "data-solectrus",
-    "version": "0.3.4",
+    "version": "0.3.6",
     "title": "Data-SOLECTRUS",
     "icon": "data-solectrus.png",
     "extIcon": "https://raw.githubusercontent.com/Felliglanz/ioBroker.data-solectrus/main/admin/data-solectrus.png",
@@ -30,6 +30,10 @@
     "license": "MIT",
     "readme": "https://github.com/Felliglanz/ioBroker.data-solectrus/blob/main/README.md",
     "news": {
+      "0.3.6": {
+        "en": "FIX: Admin UI cursor no longer jumps to the end while typing in text fields",
+        "de": "FIX: Admin UI Cursor springt beim Tippen in Textfeldern nicht mehr ans Ende"
+      },
       "0.3.4": {
         "en": "FIX: State Machine now properly handles string inputs (e.g., status == 'Idle')",
         "de": "FIX: Zustandsautomat behandelt jetzt String-Eingaben korrekt (z.B. status == 'Idle')"
