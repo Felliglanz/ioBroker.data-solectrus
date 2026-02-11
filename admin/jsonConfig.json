@@ -28,7 +28,7 @@
         "pollIntervalSeconds": {
           "type": "number",
           "label": "Poll interval (seconds)",
-          "min": 1,
+          "min": 5,
           "max": 3600,
           "default": 5,
           "sm": 6
