@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.8 - 2026-02-16
+
+### Fixed
+
+- **Formula Builder: Live UI update** - Formula is now immediately displayed in the textarea after applying changes from the builder
+  - Previously the formula was saved correctly but not visible in the UI until page reload
+  - Maintains cursor-fix compatibility with the draft system
+
 ## 0.3.6 - 2026-02-10
 
 ### Fixed
