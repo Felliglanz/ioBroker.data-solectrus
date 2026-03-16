@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0 - 2026-03-16
+
+### Performance
+
+- **Major performance improvements** - Reduced tick execution time from 100-150ms to ~1ms
+  - Replaced blocking `setStateAsync` with non-blocking `setState` for all diagnostic states
+  - Moved timing diagnostics after eval loop to prevent consuming eval time budget
+  - Added `isUnloading` guards for clean adapter shutdown
+  - Parallelized I/O operations in itemManager using `Promise.all()` instead of sequential loops
+  - Based on optimizations from patricknitsch/ioBroker.solectrus-influxdb
+
 ## 0.3.8 - 2026-02-16
 
 ### Fixed
