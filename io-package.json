@@ -40,7 +40,7 @@
       },
       "0.3.3": {
         "en": "NEW: State Machine mode for rule-based state generation (translate status codes, battery levels, etc.)",
-        "de": "NEU: Zustandsautomat-Modus f\u00fcr regelbasierte Zustandserzeugung (Status\u00fcbersetzungen, Batterie-Levels, etc.)"
+        "de": "NEU: Zustandsautomat-Modus für regelbasierte Zustandserzeugung (Statusübersetzungen, Batterie-Levels, etc.)"
       },
       "0.3.0": {
         "en": "BREAKING: Restructured diagnostics states with hierarchical organization. Enhanced timing analytics.",
@@ -62,7 +62,12 @@
         "en": "Admin UI improvements and bug fixes",
         "de": "Admin UI Verbesserungen und Bugfixes"
       }
-    }
+    },
+    "dependencies": [
+      {
+        "js-controller": ">=6.0.11"
+      }
+    ]
   },
   "native": {
     "pollIntervalSeconds": 5,
