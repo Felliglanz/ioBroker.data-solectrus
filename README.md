@@ -293,3 +293,9 @@ MIT © Sven
 
 - Formel-Parser: [jsep](https://github.com/EricSmekens/jsep)
 - JSONPath: Eigene Implementierung
+
+## Changelog
+
+### **WORK IN PROGRESS**
+- (ioBroker-Bot) Adapter requires admin >= 7.8.23 now.
+
