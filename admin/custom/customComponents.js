@@ -9,7 +9,7 @@
     'use strict';
 
     const REMOTE_NAME = 'DataSolectrusItems';
-    const UI_VERSION = '2026-02-10 v0.3.6 (cursor-fix)';
+    const UI_VERSION = '2026-08-06 v0.4.1 (admin-8-compat)';
     const DEBUG = false;
     let shareScope;
 
@@ -3594,7 +3594,16 @@
     const moduleMap = {
         './Components': async function () {
             const React = globalThis.React || (await loadShared('react'));
-            const AdapterReact = await loadShared('@iobroker/adapter-react-v5');
+            
+            // Admin 8+ compatibility: Try new package name first, fallback to old one for Admin 7
+            // Admin 8.x uses @iobroker/gui-components (React 19, MUI 9)
+            // Admin 7.x uses @iobroker/adapter-react-v5 (React 18, MUI 6)
+            let AdapterReact = await loadShared('@iobroker/gui-components');
+            if (!AdapterReact) {
+                // Fallback to old package name for Admin 7 compatibility
+                AdapterReact = await loadShared('@iobroker/adapter-react-v5');
+            }
+            
             if (!React) {
                 throw new Error('DataSolectrusItems custom UI: React not available.');
             }

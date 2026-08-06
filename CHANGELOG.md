@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1 - 2026-08-06
+
+### Fixed
+
+- **Admin 8 compatibility** - Custom UI component now supports both Admin 7 and Admin 8
+  - Implemented fallback mechanism to load `@iobroker/gui-components` (Admin 8+) or `@iobroker/adapter-react-v5` (Admin 7)
+  - Ensures continued functionality when users upgrade to Admin 8.x (React 19 / MUI 9)
+  - Maintains backward compatibility with Admin 7.x (React 18 / MUI 6)
+
 ## 0.4.0 - 2026-03-16
 
 ### Performance
