@@ -27,6 +27,7 @@
     "authors": [
       "Sven"
     ],
+    "tier": 2,
     "license": "MIT",
     "readme": "https://github.com/Felliglanz/ioBroker.data-solectrus/blob/main/README.md",
     "news": {
