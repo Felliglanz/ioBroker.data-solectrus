@@ -293,3 +293,5 @@ MIT © Sven
 
 - Formel-Parser: [jsep](https://github.com/EricSmekens/jsep)
 - JSONPath: Eigene Implementierung
+
+[Older changelogs can be found there](CHANGELOG_OLD.md)
