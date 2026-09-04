@@ -1,0 +1,1 @@
+import{t as e}from"./virtual_mf-exposes___mfe_internal__DataSolectrusItems__customComponents_js-BoK25Lfi.js";export{e as default};

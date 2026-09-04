@@ -1,0 +1,27 @@
+{
+    "name": "iobroker-data-solectrus-admin",
+    "private": true,
+    "version": "0.5.0",
+    "type": "module",
+    "scripts": {
+        "start": "vite --port 4173",
+        "build": "tsc && vite build"
+    },
+    "dependencies": {},
+    "devDependencies": {
+        "@iobroker/build-tools": "^3.0.1",
+        "@module-federation/vite": "^1.21.3",
+        "@types/node": "^26.4.1",
+        "@types/react": "^19.2.18",
+        "@types/react-dom": "^19.2.7",
+        "@vitejs/plugin-react": "^6.1.1",
+        "react": "^19.2.8",
+        "react-dom": "^19.2.8",
+        "typescript": "^7.0.2",
+        "vite": "^8.2.2"
+    },
+    "browserslist": {
+        "production": [">0.2%", "not dead", "not op_mini all"],
+        "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
+    }
+}

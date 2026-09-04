@@ -17,6 +17,7 @@
           "url": "custom/customComponents.js",
           "name": "DataSolectrusItems/Components/DataSolectrusItemsEditor",
           "label": "Configured values",
+          "guiApi": 2,
           "sm": 12
         }
       }

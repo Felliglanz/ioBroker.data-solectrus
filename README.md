@@ -10,6 +10,8 @@ Ein flexibler ioBroker-Adapter, der eigene States unter `data-solectrus.0.*` anl
 
 **Kurz gesagt:** 🧮 **Formeln** + 🔌 **beliebige ioBroker-States** → 📦 **saubere, adapter-eigene Ziel-States** (z.B. für SOLECTRUS-Dashboards).
 
+> **Ab Version 0.5.0 wird ioBroker Admin >= 8.0.0 vorausgesetzt.** Der Konfigurations-Editor nutzt die neue GUI-API-Generation 2 von Admin 8; auf älteren Admin-Versionen startet er nicht.
+
 ## 🚀 Installation
 
 ### ⭐ Empfohlene Methode: GitHub Custom URL

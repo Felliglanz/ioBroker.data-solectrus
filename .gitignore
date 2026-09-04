@@ -11,3 +11,6 @@ yarn-error.log*
 # ioBroker build artifacts (if added later)
 build/
 dist/
+
+# @module-federation/vite local diagnostics cache
+.mf/

@@ -9,6 +9,10 @@ docs/
 # Scripts
 scripts/
 
+# Admin UI dev workspace (only the built admin/custom/* output ships)
+src-admin/
+tasks.ts
+
 # Development files
 *.log
 npm-debug.log*

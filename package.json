@@ -1,6 +1,6 @@
 {
   "name": "iobroker.data-solectrus",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "ioBroker adapter to compute/mirror PV & consumption values for SOLECTRUS dashboards",
   "author": "Sven",
   "main": "main.js",
@@ -31,6 +31,16 @@
     "start": "node main.js",
     "lint": "node scripts/lint-syntax.js",
     "smoke": "node scripts/smoke-runtime.js",
-    "check:simulate": "node scripts/check-simulate-30s.js"
+    "check:simulate": "node scripts/check-simulate-30s.js",
+    "build": "tsx tasks.ts",
+    "0-clean": "tsx tasks.ts --0-clean",
+    "1-npm": "tsx tasks.ts --1-npm",
+    "2-build": "tsx tasks.ts --2-build",
+    "3-copy": "tsx tasks.ts --3-copy"
+  },
+  "devDependencies": {
+    "@iobroker/build-tools": "^3.0.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
   }
 }

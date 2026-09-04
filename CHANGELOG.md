@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0 - 2026-09-04
+
+### Breaking
+
+- **Admin 8 is now required** - the custom "Configured values" editor was rebuilt for GUI API generation 2
+  - The 0.4.1 fallback (try `@iobroker/gui-components`, fall back to `@iobroker/adapter-react-v5`) turned out to be insufficient: Admin 8 refuses to start any custom component built with the legacy hand-rolled Module Federation container, regardless of which UI library it manages to load at runtime, so it was rejected outright with "was built for GUI API generation 1"
+  - The editor is now built with a proper Vite + `@module-federation/vite` pipeline (`src-admin/`) that declares `"guiApi": 2` in `admin/jsonConfig.json`, matching Admin 8's requirements
+  - `@iobroker/gui-components` (and `@mui/*`) were deliberately **not** added as a build dependency: the editor doesn't use any of its components, and sharing it as a Module Federation singleton would have inflated local build times from seconds to 18+ minutes by pulling in its full MUI icon set. Only `react`/`react-dom` are shared with Admin
+  - One user-facing change: the "pick an existing state" button next to state-ID fields is now always disabled (it depended on `adapter-react-v5`'s `DialogSelectID`, which is intentionally not bundled) - type the state ID manually instead. This already degraded gracefully on setups without that dialog, so no other functionality is affected
+  - **Admin 7 is no longer supported** - please update to Admin 8 before installing this version
+
 ## 0.4.1 - 2026-08-06
 
 ### Fixed
